@@ -16,7 +16,7 @@ from pptx.dml.color import RGBColor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ppt_layout import (
     FONT_EN, FONT_CN, BODY_SIZE, TEAL, DARK, WHITE,
-    blank_layout, make_result_slide, parse_color,
+    blank_layout, make_result_slide, parse_color, init_design,
 )
 from ppt_slides import (
     build_author_slide, build_background_slide, build_summary_slide,
@@ -170,6 +170,10 @@ def build(config, json_path='.'):
     output_path = resolve_path(json_path, meta.get('output_path', 'output.pptx'))
     figs_dir = resolve_path(json_path, meta.get('figs_dir', './figs'))
     indices = meta.get('template_slide_indices', {})
+
+    # 加载模板设计令牌（自动查找 template_path 同目录的 _design.json）
+    design_json = template_path.replace('.pptx', '_design.json')
+    init_design(design_json)
 
     prs = Presentation(template_path)
     print(f"Template: {len(prs.slides)} slides")
