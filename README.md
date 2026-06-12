@@ -102,7 +102,9 @@ python build_portable.py
 ```
 scripts/     CLI 脚本 (make_template, extract_images, ppt_builder, ...)
 gui/         GUI 代码 (customtkinter)
-demo/        示例论文 + 图片 + 模板
+demo/
+  demo1/      AST-LLM 示例（神经网络稀疏训练）
+  demo2/      Attention Is All You Need 示例（Swiss 模板）
 templates/   JSON Schema + 参考示例
 ```
 

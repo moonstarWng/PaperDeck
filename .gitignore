@@ -26,7 +26,7 @@ Thumbs.db
 # User data (may contain copyrighted material)
 paper/
 *.pdf
-!demo/demo_paper.pdf
+!demo/**/demo_paper.pdf
 
 # Local-only (not pushed)
 ROADMAP.md

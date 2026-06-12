@@ -34,9 +34,9 @@ def main():
     # ── Test 2: ppt_builder ──
     print("\n[Test 2] ppt_builder.py")
     from ppt_builder import load_json, build
-    demo_json = os.path.abspath(os.path.join('demo', 'slide-content.json'))
-    demo_tmpl = os.path.abspath(os.path.join('demo', 'template.pptx'))
-    demo_figs = os.path.abspath(os.path.join('demo', 'figs'))
+    demo_json = os.path.abspath(os.path.join('demo', 'demo1', 'slide-content.json'))
+    demo_tmpl = os.path.abspath(os.path.join('demo', 'demo1', 'template.pptx'))
+    demo_figs = os.path.abspath(os.path.join('demo', 'demo1', 'figs'))
 
     if os.path.exists(demo_json) and os.path.exists(demo_tmpl):
         config = load_json(demo_json)
@@ -77,7 +77,7 @@ def main():
     # ── Test 4: extract_images ──
     print("\n[Test 4] extract_images.py")
     from extract_images import extract_images
-    demo_pdf = os.path.join('demo', 'demo_paper.pdf')
+    demo_pdf = os.path.join('demo', 'demo1', 'demo_paper.pdf')
     if os.path.exists(demo_pdf):
         with tempfile.TemporaryDirectory() as td:
             n = extract_images(demo_pdf, td)
