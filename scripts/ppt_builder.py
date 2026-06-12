@@ -160,11 +160,11 @@ def edit_section_divider(slide, number, title):
                     for run in para.runs:
                         if run.text.strip().isdigit() and len(run.text.strip()) == 2:
                             run.text = number
-            # 匹配中文标题（Unicode 范围：基本汉字区 U+4E00-U+9FFF）
-            elif len(text) >= 2 and any('一' <= c <= '鿿' for c in text):
+            # 匹配章节标题：中文或英文（只要不是纯数字且长度≥2）
+            elif len(text) >= 2 and not text.isdigit():
                 for para in shape.text_frame.paragraphs:
                     for run in para.runs:
-                        if any('一' <= c <= '鿿' for c in run.text):
+                        if not run.text.strip().isdigit() and len(run.text.strip()) >= 2:
                             run.text = title
 
 

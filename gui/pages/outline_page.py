@@ -172,26 +172,42 @@ class OutlinePage(ctk.CTkFrame):
             messagebox.showerror("错误", "大纲数据格式异常")
             return
 
+        slides = tree_data.get("slides", [])
+
+        # 自动注入论文信息页（在第一个 keep section 之后）
+        pdf_path = self.shared.get('pdf_path', '')
+        if pdf_path and os.path.exists(pdf_path):
+            has_paper_info = any(s.get('type') == 'paper_info' for s in slides)
+            if not has_paper_info:
+                paper_title = self.title_entry.get().strip()
+                pi = {'type': 'paper_info', 'pdf_path': pdf_path,
+                       'paper_title': paper_title, 'extra_text': ''}
+                # 找到 author slide 后的位置插入
+                insert_at = 0
+                for j, s in enumerate(slides):
+                    if s.get('type') == 'author':
+                        insert_at = j + 1; break
+                slides.insert(insert_at, pi)
+
         full_config = {
             "meta": {
                 "template_path": self.shared.get('template_path', ''),
                 "figs_dir": figs_dir,
-                "output_path": "./output.pptx",
-                "template_slide_indices": {"cover": 0, "toc": 1, "sections": [2, 3, 5, 6], "thanks": 7}
+                "output_path": "./output.pptx"
             },
             "cover": {
                 "title_en": self.title_entry.get().strip(),
                 "presenter": "xxx",
                 "date": "202X年X月"
             },
-            "toc_replacements": {"研究背景": "课题背景", "结论分析": "结果分析", "总结讨论": "讨论"},
+            "toc_replacements": {},
             "section_divider_edits": [
                 {"number": "01", "title": "作者团队"},
                 {"number": "02", "title": "课题背景"},
                 {"number": "03", "title": "结果分析"},
                 {"number": "04", "title": "讨论"}
             ],
-            "slides": tree_data.get("slides", [])
+            "slides": slides
         }
         self.shared['slide_content_json'] = json.dumps(full_config, indent=2, ensure_ascii=False)
         self.app.switch_to_tab("构建")
