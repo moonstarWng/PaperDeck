@@ -267,7 +267,9 @@ def build(config, json_path='.'):
             print(f"  Result: {title[:60]}")
 
         elif stype in slide_builders:
-            # 特殊视觉页（作者、背景、总结、讨论）
+            # 解析 paper_info 的相对路径
+            if stype == 'paper_info' and item.get('pdf_path'):
+                item['pdf_path'] = resolve_path(json_path, item['pdf_path'])
             slide_builders[stype](prs, item)
             new_order.append(len(prs.slides) - 1)
             print(f"  {stype}: {item.get('title', '')[:60]}")
