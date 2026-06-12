@@ -1,0 +1,268 @@
+{
+  "meta": {
+    "template_path": "./template/template.pptx",
+    "output_path": "./output.pptx",
+    "figs_dir": "./figs",
+    "template_slide_indices": {
+      "cover": 0,
+      "toc": 1,
+      "sections": [2, 3, 5, 6],
+      "thanks": 7,
+      "content_ref": 4
+    }
+  },
+  "cover": {
+    "title_en": "Gut Microbiota Modulates Synaptic Plasticity,\nConnectivity, and Dopamine Transmission\nin the VTA-mPFC Pathway in Bipolar Depression",
+    "presenter": "xxx",
+    "date": "202X年X月",
+    "journal_info": "Molecular Psychiatry, 2025",
+    "institution": "浙江大学医学院附属第一医院"
+  },
+  "toc_replacements": {
+    "研究背景": "课题背景",
+    "结论分析": "结果分析",
+    "总结讨论": "讨论"
+  },
+  "section_divider_edits": [
+    { "number": "01", "title": "作者团队" },
+    { "number": "02", "title": "课题背景" },
+    { "number": "03", "title": "结果分析" },
+    { "number": "04", "title": "讨论" }
+  ],
+  "slides": [
+    { "type": "keep", "ref": "cover" },
+    { "type": "keep", "ref": "toc" },
+    { "type": "keep", "ref": "section", "index": 0 },
+    {
+      "type": "author",
+      "journal": {
+        "name": "Molecular Psychiatry",
+        "if": "13.4",
+        "doi": "10.1038/s41380-025-03398-y",
+        "date": "2025年12月"
+      },
+      "institutions": [
+        "浙江大学医学院附属第一医院 精神科",
+        "浙江大学脑科学与脑医学学院",
+        "之江实验室 · 南湖脑机接口研究院"
+      ],
+      "authors": "柯思  教授  |  来建波  教授  |  龚薇  教授  |  胡少华  教授",
+      "prior_work": [
+        "2021年: 首次发现BD患者肠道菌群移植可诱导小鼠绝望行为 (Frontiers in Immunology)",
+        "2022年: 多组学整合分析揭示BD存在显著的菌群-肠-脑轴功能失调 (Molecular Psychiatry)",
+        "2025年: 本研究成果 — 系统阐明VTA-mPFC通路在菌群驱动BD抑郁中的核心作用"
+      ]
+    },
+    { "type": "keep", "ref": "section", "index": 1 },
+    {
+      "type": "background",
+      "cards": [
+        {
+          "title": "临床困境",
+          "body": "双相障碍(BD)是最具挑战性的\n精神疾病之一\n\n· 全球患病率约 2%\n· 误诊率极高\n· 发病机制不清",
+          "color": "red_accent"
+        },
+        {
+          "title": "核心问题",
+          "body": "肠道菌群失调是BD的新兴\n疾病表型\n\n菌群如何影响\nBD中枢神经系统？\n\n→ 机制完全未知",
+          "color": "gold"
+        },
+        {
+          "title": "研究策略",
+          "body": "① FMT构建BD抑郁小鼠模型\n② 聚焦mPFC脑区:\n    · 突触可塑性\n    · 全脑输入连接组\n    · 多巴胺神经传递\n③ 揭示VTA→mPFC通路机制",
+          "color": "teal"
+        }
+      ],
+      "hypothesis": "BD患者肠道菌群 → 重塑小鼠肠道微生态 → mPFC突触可塑性受损 → VTA-mPFC多巴胺通路障碍 → BD抑郁样行为",
+      "experiment": "6名BD抑郁期男性患者(未用药) + 6名健康对照 → FMT至抗生素预处理C57BL/6小鼠 → 行为学 → 多组学 → 病毒示踪 → 光纤记录"
+    },
+    { "type": "keep", "ref": "section", "index": 2 },
+    {
+      "type": "result",
+      "title": "3.1 FMT构建双相抑郁小鼠模型",
+      "body": [
+        "BD患者粪菌移植至抗生素预处理小鼠，进行系统行为学测试",
+        "开放旷场活动减少，强迫游泳不动时间延长，蔗糖偏好降低",
+        "锂盐可逆转上述缺陷而氟西汀无效，表明模型具有BD特异性"
+      ],
+      "images": [
+        { "file": "1A.jpg", "top_in": 1.05 },
+        { "file": "1DEF.jpg", "top_in": 3.85 }
+      ]
+    },
+    {
+      "type": "result",
+      "title": "3.1 粪菌移植重塑肠道菌群组成",
+      "body": [
+        "FMT成功重塑受体肠道菌群，BD与对照组菌群结构显著分离",
+        "BD小鼠与BD供体患者共享259个细菌物种",
+        "LEfSe识别6个关键差异菌属：Parabacteroides, Alistipes等"
+      ],
+      "images": [
+        { "file": "1GH.jpg", "top_in": 1.05 },
+        { "file": "1KL.jpg", "top_in": 3.85 }
+      ]
+    },
+    {
+      "type": "result",
+      "title": "3.2 mPFC转录组学揭示突触后翻译通路下调",
+      "body": [
+        "RNA-seq分析：202个基因上调，64个基因下调",
+        "GSEA揭示突触后翻译为下调基因中排名第一的显著富集通路",
+        "涉及核糖体蛋白、翻译延伸因子等多个基因家族的表达下调"
+      ],
+      "images": [
+        { "file": "2BC.jpg", "top_in": 1.05 },
+        { "file": "2FG.jpg", "top_in": 3.85 }
+      ]
+    },
+    {
+      "type": "result",
+      "title": "3.3 mPFC锥体神经元树突棘密度显著降低",
+      "body": [
+        "稀疏标记联合三维重建分析mPFC锥体神经元树突棘形态",
+        "BD小鼠树突棘总密度显著下降，蘑菇型成熟棘降幅最大",
+        "树突棘是兴奋性突触的结构基础，其丢失意味着突触可塑性受损"
+      ],
+      "images": [
+        { "file": "2I.jpg", "top_in": 1.05 },
+        { "file": "2J.jpg", "top_in": 3.85 }
+      ]
+    },
+    {
+      "type": "result",
+      "title": "3.4 全脑单突触示踪揭示VTA-mPFC连接减弱",
+      "body": [
+        "狂犬病毒逆行示踪标记mPFC谷氨酸能神经元的全脑上游输入",
+        "多巴胺空间输入比例显著降低，其他递质系统无显著差异",
+        "VTA至mPFC连接特异性减弱，黑质致密部投射未见明显变化"
+      ],
+      "images": [
+        { "file": "3A.jpg", "top_in": 1.05 },
+        { "file": "3E.jpg", "top_in": 2.8 },
+        { "file": "3H.jpg", "top_in": 4.7 }
+      ]
+    },
+    {
+      "type": "result",
+      "title": "3.5 BLA投射mPFC神经元的输入连接重映射",
+      "body": [
+        "投射特异性示踪标记BLA投射mPFC神经元的上游全脑输入",
+        "TT区输入减少涉及应激信号处理，VTA输入则完全缺失",
+        "mPFC至BLA环路存在双重失连接，构成情绪失调的神经基础"
+      ],
+      "images": [
+        { "file": "4A.jpg", "top_in": 1.05 },
+        { "file": "4C.jpg", "top_in": 3.75 }
+      ]
+    },
+    {
+      "type": "result",
+      "title": "3.6 光纤记录揭示mPFC多巴胺功能响应缺陷",
+      "body": [
+        "GRAB-DA荧光传感器实时监测夹尾刺激诱发的mPFC多巴胺释放",
+        "BD小鼠多巴胺响应峰值幅度和曲线下面积均显著降低",
+        "结构连接减少与功能响应减弱共同证实VTA-mPFC通路受损"
+      ],
+      "images": [
+        { "file": "5ABCD.jpg", "top_in": 1.05 },
+        { "file": "5EFGH.jpg", "top_in": 3.85 }
+      ]
+    },
+    {
+      "type": "result",
+      "title": "3.7 VTA多巴胺能神经元投射减少的双重验证",
+      "body": [
+        "CTB逆行示踪联合狂犬病毒跨突触示踪，双重策略交叉验证",
+        "VTA中投射至mPFC的TH阳性多巴胺能神经元比例显著减少",
+        "与mPFC形成突触连接的VTA多巴胺能神经元数量也显著降低"
+      ],
+      "images": [
+        { "file": "5JKL.jpg", "top_in": 1.05 },
+        { "file": "5MNO.jpg", "top_in": 3.85 }
+      ]
+    },
+    {
+      "type": "summary",
+      "title": "3.8 研究总结：菌群-肠-脑轴驱动BD抑郁的完整机制证据链",
+      "flow_steps": [
+        { "text": "BD患者\n肠道菌群", "color": "red_accent" },
+        { "text": "肠道菌群重塑\n6个关键菌属变化", "color": "orange" },
+        { "text": "mPFC突触后\n翻译通路下调", "color": "gold" },
+        { "text": "树突棘密度降低\n突触可塑性受损", "color": "blue_slate" },
+        { "text": "VTA-mPFC\n连接减弱", "color": "teal" },
+        { "text": "mPFC多巴胺\n功能响应减弱", "color": "blue_deep" },
+        { "text": "BD抑郁样行为\n绝望+快感缺失", "color": "navy" }
+      ],
+      "evidence_cards": [
+        { "title": "结构证据", "detail": "树突棘减少 + 突触后翻译下调 + VTA至mPFC突触连接减弱" },
+        { "title": "功能证据", "detail": "mPFC多巴胺响应减弱 (峰值幅度降低, AUC减小)" },
+        { "title": "行为证据", "detail": "绝望增加、快感缺失、活动减少 — 锂盐可逆转, 氟西汀无效" }
+      ],
+      "conclusions": [
+        "本研究首次建立了从肠道菌群到行为表型的完整证据链:",
+        "",
+        "BD患者肠道菌群(含6个关键菌属) → 重塑受体小鼠肠道微生态",
+        "→ mPFC转录组改变(突触后翻译下调) → 锥体神经元树突棘密度降低",
+        "→ VTA至mPFC谷氨酸能神经元单突触连接减少 → mPFC多巴胺功能响应减弱",
+        "→ BD抑郁样行为(绝望、快感缺失、活动减少)",
+        "",
+        "核心发现: 菌群-肠-脑轴驱动VTA-mPFC多巴胺通路功能障碍 → BD抑郁发病的全新机制"
+      ]
+    },
+    { "type": "keep", "ref": "section", "index": 3 },
+    {
+      "type": "discussion1",
+      "title": "4 讨论：核心发现与机制解读",
+      "items": [
+        {
+          "number": "1",
+          "title": "BD特异性菌群特征",
+          "detail": "6个促炎/代谢相关菌属显著富集(Alistipes、Klebsiella等), 与MDD报道的菌群谱明显不同, 提示BD存在特异性肠-脑轴改变"
+        },
+        {
+          "number": "2",
+          "title": "级联性突触损伤机制",
+          "detail": "树突棘丢失 → 突触后翻译抑制 → VTA多巴胺能输入减少; 锂盐有效而氟西汀无效, 表明机制涉及多巴胺通路而非5-HT系统"
+        },
+        {
+          "number": "3",
+          "title": "mPFC-BLA环路多重失连接",
+          "detail": "TT区输入减少(应激信号处理受损)与VTA输入完全缺失(奖赏调节缺失)同时存在, 可能构成BD情绪失调的双重神经基础"
+        },
+        {
+          "number": "4",
+          "title": "VTA-mPFC通路的驱动作用",
+          "detail": "本研究首次证明BD肠道菌群通过削弱VTA-mPFC多巴胺功能驱动抑郁表型, 为菌群-肠-脑轴机制研究提供了全新的因果证据链"
+        }
+      ]
+    },
+    {
+      "type": "discussion2",
+      "title": "4 局限性与临床意义",
+      "left_title": "局限性",
+      "left_items": [
+        "1. 仅纳入抑郁相患者, 未评估躁狂样行为及昼夜节律异常",
+        "2. 所有供体均为男性, 缺少女性特异性菌群特征",
+        "3. 同笼饲养存在菌群趋同效应",
+        "4. 混合供体FMT设计, 无法解析个体微生物的差异化效应",
+        "5. 仅单一时间点评估, 未捕获FMT前后菌群与行为的动态变化",
+        "6. VTA-mPFC环路神经电活动尚未表征, 需借助多通道电生理记录技术进一步解析"
+      ],
+      "right_title": "临床意义与未来方向",
+      "right_items": [
+        "临床意义:",
+        "·  揭示菌群-肠-脑轴介导BD的全新机制",
+        "·  VTA-mPFC多巴胺通路是BD潜在治疗靶点",
+        "·  为肠道菌群BD诊断标志物和干预策略提供理论依据",
+        "",
+        "未来方向:",
+        "·  纳入雌性供体与雌性小鼠, 提高研究代表性",
+        "·  纵向多时间点评估, 捕获菌群-行为动态变化",
+        "·  单供体FMT设计, 结合多通道电生理记录",
+        "·  同步评估躁狂相行为与昼夜节律表型"
+      ]
+    },
+    { "type": "keep", "ref": "thanks" }
+  ]
+}

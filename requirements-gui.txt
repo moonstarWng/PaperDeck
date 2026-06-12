@@ -1,0 +1,8 @@
+customtkinter>=5.2
+pyinstaller>=6.0
+python-pptx
+pypdf
+pdfplumber
+lxml
+Pillow
+requests

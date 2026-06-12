@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Output files
+outputs/
+output.pptx
+*.pptx
+
+# Except template examples
+!example/*.pptx
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# User data (may contain copyrighted material)
+paper/
+figs/
+*.pdf
+!example/*.pdf
+
+# Temporary
+.paper2ppt_state.json

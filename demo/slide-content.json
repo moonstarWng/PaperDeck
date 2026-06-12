@@ -1,0 +1,117 @@
+{
+  "meta": {
+    "template_path": "./template.pptx",
+    "output_path": "./demo_output.pptx",
+    "figs_dir": "./figs",
+    "template_slide_indices": { "cover": 0, "toc": 1, "sections": [2,3,5,6], "thanks": 7 }
+  },
+  "cover": {
+    "title_en": "AST-LLM: Adaptive Sparse Training\nfor Energy-Efficient Large Language Models",
+    "presenter": "xxx",
+    "date": "202X年X月"
+  },
+  "toc_replacements": { "研究背景": "课题背景", "结论分析": "结果分析", "总结讨论": "讨论" },
+  "section_divider_edits": [
+    { "number": "01", "title": "作者团队" },
+    { "number": "02", "title": "课题背景" },
+    { "number": "03", "title": "结果分析" },
+    { "number": "04", "title": "讨论" }
+  ],
+  "slides": [
+    { "type": "keep", "ref": "cover" },
+    { "type": "keep", "ref": "toc" },
+    { "type": "keep", "ref": "section", "index": 0 },
+    {
+      "type": "author",
+      "journal": { "name": "Submitted to NeurIPS", "if": "2026", "doi": "arXiv:xxxx.xxxxx", "date": "2026年" },
+      "institutions": ["北京大学 计算机学院", "清华大学 AI研究院"],
+      "authors": "Wei Chen 博士 | Ming Zhang 教授 | Jing Liu 教授 | Hao Wang 教授",
+      "prior_work": ["前期发现LLM各层对剪枝敏感度存在显著差异 (ICLR 2025)", "提出基于梯度信号的动态稀疏训练框架 (ICML 2024)", "本工作首次将自适应稀疏训练扩展至130亿参数LLM规模"]
+    },
+    { "type": "keep", "ref": "section", "index": 1 },
+    {
+      "type": "background",
+      "cards": [
+        { "title": "效率困境", "body": "GPT-4训练耗电超50GWh\n≈5000户家庭年用电量\n\nLLM规模持续增长\n训练成本不可持续", "color": "red_accent" },
+        { "title": "核心挑战", "body": "稀疏训练是解决方案\n但现有方法使用静态掩码\n无法适应动态损失景观\n\n硬件利用率低\n理论加速难以兑现", "color": "gold" },
+        { "title": "AST-LLM方案", "body": "① 梯度感知稀疏分配(GASA)\n② 滞后剪枝调度(HPS)\n③ 硬件感知块稀疏实现\n\n→ 90%稀疏度，质量几乎无损", "color": "teal" }
+      ],
+      "hypothesis": "自适应稀疏训练 → 层间动态分配参数 → 保持关键连接 → 稀疏度与模型质量兼得",
+      "experiment": "Llama-2 (7B,13B) + GPT-3 (1.3B,6.7B) × Pile/RefinedWeb × 256 A100 GPUs"
+    },
+    { "type": "keep", "ref": "section", "index": 2 },
+    {
+      "type": "result",
+      "title": "3.1 AST-LLM框架：三组件协同设计",
+      "body": ["GASA模块根据梯度统计持续重分配各层稀疏预算", "HPS双阈值机制防止重要连接的振荡式剪枝与再生", "32×32块稀疏格式在A100上实现3.2倍实际加速"],
+      "images": [{ "file": "1A.jpg", "top_in": 1.05 }, { "file": "1DEF.jpg", "top_in": 3.85 }]
+    },
+    {
+      "type": "result",
+      "title": "3.2 主要结果：90%稀疏度下质量几乎无损",
+      "body": ["AST-LLM在90%稀疏度下困惑度仅退化0.8%，远超其他方法", "训练FLOPs减少4.7倍，能耗降低3.9倍，接近理论最优", "自适应稀疏的优势随模型规模增大而增强"],
+      "images": [{ "file": "2A.jpg", "top_in": 1.05 }, { "file": "2FG.jpg", "top_in": 3.85 }]
+    },
+    {
+      "type": "result",
+      "title": "3.3 消融实验：GASA贡献62%的总体提升",
+      "body": ["GASA（梯度感知分配）是最关键创新，贡献62%的困惑度改善", "HPS（滞后剪枝）减少训练后期不稳定性，贡献28%", "α=0.5、Δ₀=0.15、T_update=500在各规模下均稳健"],
+      "images": [{ "file": "2BC.jpg", "top_in": 1.05 }, { "file": "2DE.jpg", "top_in": 3.85 }]
+    },
+    {
+      "type": "result",
+      "title": "3.4 层间稀疏分布：从统一到自适应",
+      "body": ["GASA学到的层间稀疏分布高度非均匀：中段可达92-95%", "嵌入层和LM头保留较多参数（55-75%稀疏度）", "验证了层间异质性假设——不同层敏感度差异显著"],
+      "images": [{ "file": "2H.jpg", "top_in": 1.05 }, { "file": "2I.jpg", "top_in": 3.85 }]
+    },
+    {
+      "type": "result",
+      "title": "3.5 训练动态：三阶段收敛模式",
+      "body": ["阶段一(0-5k步)：快速剪枝，掩码初稳定", "阶段二(5k-20k步)：GASA重分配稀疏预算，探索最优配置", "阶段三(>20k步)：权重与掩码同时收敛，训练稳定"],
+      "images": [{ "file": "3A.jpg", "top_in": 1.05 }, { "file": "3B.jpg", "top_in": 3.85 }]
+    },
+    {
+      "type": "result",
+      "title": "3.6 下游任务与推理效率综合评估",
+      "body": ["MMLU等4个基准上达稠密基线97%以上性能", "推理加速2.8倍（块稀疏）至4.1倍（结构化剪枝）", "多语言、长序列评估均无异常退化"],
+      "images": [{ "file": "3C.jpg", "top_in": 1.05 }, { "file": "3D.jpg", "top_in": 3.85 }]
+    },
+    {
+      "type": "summary",
+      "title": "3.7 研究总结：自适应稀疏训练的全栈方案",
+      "flow_steps": [
+        { "text": "LLM训练\n能耗危机", "color": "red_accent" },
+        { "text": "AST-LLM\n三组件框架", "color": "gold" },
+        { "text": "GASA\n梯度感知分配", "color": "teal" },
+        { "text": "HPS\n滞后剪枝调度", "color": "blue_slate" },
+        { "text": "块稀疏\n硬件加速", "color": "blue_deep" },
+        { "text": "90%稀疏度\n质量几乎无损", "color": "navy" }
+      ],
+      "evidence_cards": [
+        { "title": "效率证据", "detail": "4.7× FLOPs减少，3.9× 能耗降低，3.2× 实际加速" },
+        { "title": "质量证据", "detail": "90%稀疏度下仅0.8%困惑度退化，优于RigL(2.3%)和SET(3.7%)" },
+        { "title": "可扩展性", "detail": "优势随模型规模增大，13B模型上效果最显著" }
+      ],
+      "conclusions": ["AST-LLM首次在130亿参数LLM上实现90%稀疏度训练且质量几乎无损", "核心创新GASA+HPS+块稀疏形成互补：分配+稳定+加速", "为可持续AI提供了实用的大模型高效训练方案"]
+    },
+    { "type": "keep", "ref": "section", "index": 3 },
+    {
+      "type": "discussion1",
+      "title": "4 讨论：核心发现与机制解读",
+      "items": [
+        { "number": "1", "title": "自适应稀疏为何随规模增强", "detail": "大模型中层间损失景观异质性更强（梯度方差从2.3×增至6.8×），GASA通过将参数集中在强梯度层来利用这一特性，规模越大收益越显著" },
+        { "number": "2", "title": "滞后机制的稳定化作用", "detail": "HPS有效抑制了权重的振荡式剪枝-再生，梯度信号传播比（0.68）远优于RigL（0.41）和SET（0.28），保障了深层Transformer的有效训练" },
+        { "number": "3", "title": "块稀疏的工程价值", "detail": "32×32块粒度在Tensor Core利用率和稀疏灵活性之间取得平衡，理论加速（10×）与实际加速（3.2×）的差距显著缩小" }
+      ]
+    },
+    {
+      "type": "discussion2",
+      "title": "4 局限性与未来方向",
+      "left_title": "局限性",
+      "left_items": ["1. 仅验证A100 GPU，TPU/AMD等硬件加速效果未测", "2. 仅测试Decoder-only架构，T5/MoE等架构待验证", "3. 块稀疏限制最高稀疏度约95%，之后块级效应出现", "4. GASA假设梯度幅值可靠代理参数重要性"],
+      "right_title": "未来方向",
+      "right_items": ["技术延伸:", "·  扩展至MoE架构，探索动态专家选择与动态稀疏的协同", "·  开发基于Triton的硬件无关块稀疏内核", "·  集成量化技术实现乘数级效率提升", "", "应用拓展:", "·  持续预训练和领域适配场景的验证", "·  探索推理阶段的结构化剪枝优化"]
+    },
+    { "type": "keep", "ref": "thanks" }
+  ]
+}

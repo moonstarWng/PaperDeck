@@ -1,0 +1,224 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "paper2ppt Slide Content",
+  "description": "Input format for ppt_builder.py — defines all slide content and metadata",
+  "type": "object",
+  "required": ["meta", "slides"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["template_path", "figs_dir", "template_slide_indices"],
+      "properties": {
+        "template_path": { "type": "string" },
+        "output_path": { "type": "string" },
+        "figs_dir": { "type": "string", "default": "./figs" },
+        "template_slide_indices": {
+          "type": "object",
+          "required": ["cover", "toc", "sections", "thanks"],
+          "properties": {
+            "cover": { "type": "integer" },
+            "toc": { "type": "integer" },
+            "sections": { "type": "array", "items": { "type": "integer" } },
+            "thanks": { "type": "integer" },
+            "content_ref": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "cover": {
+      "type": "object",
+      "properties": {
+        "title_en": { "type": "string" },
+        "presenter": { "type": "string" },
+        "date": { "type": "string" },
+        "journal_info": { "type": "string" },
+        "institution": { "type": "string" }
+      }
+    },
+    "toc_replacements": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Map of OLD_TOC_TEXT → NEW_TOC_TEXT"
+    },
+    "section_divider_edits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "title"],
+        "properties": {
+          "number": { "type": "string", "pattern": "^[0-9]{2}$" },
+          "title": { "type": "string" }
+        }
+      }
+    },
+    "slides": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/keep_slide" },
+          { "$ref": "#/definitions/author_slide" },
+          { "$ref": "#/definitions/background_slide" },
+          { "$ref": "#/definitions/result_slide" },
+          { "$ref": "#/definitions/summary_slide" },
+          { "$ref": "#/definitions/discussion1_slide" },
+          { "$ref": "#/definitions/discussion2_slide" }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "keep_slide": {
+      "type": "object",
+      "required": ["type", "ref"],
+      "properties": {
+        "type": { "enum": ["keep"] },
+        "ref": { "type": "string", "enum": ["cover", "toc", "thanks", "section"] },
+        "index": {
+          "type": "integer",
+          "description": "When ref=section, the 0-based index into sections array"
+        }
+      }
+    },
+    "author_slide": {
+      "type": "object",
+      "required": ["type", "journal", "institutions", "authors"],
+      "properties": {
+        "type": { "enum": ["author"] },
+        "journal": {
+          "type": "object",
+          "required": ["name"],
+          "properties": {
+            "name": { "type": "string" },
+            "if": { "type": "string" },
+            "doi": { "type": "string" },
+            "date": { "type": "string" }
+          }
+        },
+        "institutions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "authors": { "type": "string" },
+        "prior_work": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "background_slide": {
+      "type": "object",
+      "required": ["type", "cards"],
+      "properties": {
+        "type": { "enum": ["background"] },
+        "cards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["title", "body"],
+            "properties": {
+              "title": { "type": "string" },
+              "body": { "type": "string" },
+              "color": { "type": "string" }
+            }
+          },
+          "minItems": 2,
+          "maxItems": 4
+        },
+        "hypothesis": { "type": "string" },
+        "experiment": { "type": "string" }
+      }
+    },
+    "result_slide": {
+      "type": "object",
+      "required": ["type", "title", "body", "images"],
+      "properties": {
+        "type": { "enum": ["result"] },
+        "title": { "type": "string" },
+        "body": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "top_in"],
+            "properties": {
+              "file": { "type": "string" },
+              "top_in": { "type": "number" }
+            }
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "summary_slide": {
+      "type": "object",
+      "required": ["type", "title", "flow_steps"],
+      "properties": {
+        "type": { "enum": ["summary"] },
+        "title": { "type": "string" },
+        "flow_steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["text"],
+            "properties": {
+              "text": { "type": "string" },
+              "color": { "type": "string" }
+            }
+          }
+        },
+        "evidence_cards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["title", "detail"],
+            "properties": {
+              "title": { "type": "string" },
+              "detail": { "type": "string" }
+            }
+          }
+        },
+        "conclusions": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "discussion1_slide": {
+      "type": "object",
+      "required": ["type", "title", "items"],
+      "properties": {
+        "type": { "enum": ["discussion1"] },
+        "title": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["number", "title", "detail"],
+            "properties": {
+              "number": { "type": "string" },
+              "title": { "type": "string" },
+              "detail": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "discussion2_slide": {
+      "type": "object",
+      "required": ["type", "title", "left_title", "left_items", "right_title", "right_items"],
+      "properties": {
+        "type": { "enum": ["discussion2"] },
+        "title": { "type": "string" },
+        "left_title": { "type": "string" },
+        "left_items": { "type": "array", "items": { "type": "string" } },
+        "right_title": { "type": "string" },
+        "right_items": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}
