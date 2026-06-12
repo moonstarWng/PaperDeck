@@ -28,5 +28,8 @@ paper/
 *.pdf
 !demo/demo_paper.pdf
 
+# Local-only (not pushed)
+ROADMAP.md
+
 # Temporary
 .paper2ppt_state.json
