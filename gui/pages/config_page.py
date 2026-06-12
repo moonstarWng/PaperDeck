@@ -5,6 +5,7 @@ import customtkinter as ctk
 import sys, os, threading
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from gui.widgets.file_picker import FilePicker
+from gui.logger import log_step
 
 
 class ConfigPage(ctk.CTkFrame):
@@ -71,6 +72,7 @@ class ConfigPage(ctk.CTkFrame):
     # ── 模板检测 ──
     def _detect_template(self):
         """检测 PPTX 是否为模板骨架。"""
+        log_step('config', '模板检测开始')
         path = self.tmpl_picker.get_path()
         if not path:
             self.tmpl_status.configure(text="请先选择模板文件", text_color="red")

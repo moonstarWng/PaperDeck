@@ -3,6 +3,7 @@ gui/workers/llm_worker.py — LLM API 调用工作线程。
 使用 OpenAI 兼容的 Chat Completions API 生成大纲和 slide-content.json。
 """
 import json, requests
+from gui.logger import log_step
 
 
 def _sanitize(text):
@@ -76,6 +77,7 @@ def call_llm(base_url, api_key, model, user_prompt, on_progress=None):
     """
     if on_progress:
         on_progress("正在连接 LLM API...")
+    log_step('llm', f'调用 {model} @ {base_url}')
     system_prompt = build_system_prompt()
 
     resp = requests.post(

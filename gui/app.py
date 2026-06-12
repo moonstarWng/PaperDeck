@@ -8,6 +8,7 @@ from gui.pages.config_page import ConfigPage
 from gui.pages.outline_page import OutlinePage
 from gui.pages.build_page import BuildPage
 from gui import persistence
+from gui import logger as log
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -47,6 +48,7 @@ class App(ctk.CTk):
         self.tabview.add("大纲生成")
         self.tabview.add("构建")
 
+        log.get_logger()  # 初始化日志
         # 恢复上次会话数据
         persistence.restore_to_shared(self.shared)
 

@@ -8,6 +8,7 @@ from tkinter import messagebox
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from gui.workers.llm_worker import call_llm
 from gui.widgets.outline_editor import OutlineEditor
+from gui.logger import log_step
 
 
 class OutlinePage(ctk.CTkFrame):
@@ -59,6 +60,7 @@ class OutlinePage(ctk.CTkFrame):
 
     # ── 读取论文 ──
     def _read_paper(self):
+        log_step('outline', '开始读取论文')
         pdf_path = self.shared.get('pdf_path')
         if not pdf_path:
             messagebox.showerror("错误", "请先在配置页选择论文 PDF")
