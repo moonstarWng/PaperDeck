@@ -28,6 +28,9 @@ paper/
 *.pdf
 !demo/**/demo_paper.pdf
 
+# Generated artifacts
+*_page1.jpg
+
 # Local-only (not pushed)
 ROADMAP.md
 
