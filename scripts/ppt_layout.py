@@ -181,25 +181,23 @@ def P(slide, path, l, t, w=None):
 def title_bar(slide, text):
     """
     内容页标题栏。使用设计令牌中的颜色和装饰。
-    如果 HEADER_DECOS 非空，使用模板提取的装饰元素；
-    否则使用默认的左侧色块 + 分隔线布局。
+    绘制顺序：背景条 → 装饰元素 → 标题文字（确保文字不被遮挡）。
     """
-    # 标题文字
-    T(slide, 0.5, 0.15, 12.3, 0.55, text, sz=TITLE_SIZE, bold=True, color=TITLE_COLOR)
-
+    # 1. 先画页眉装饰（背景条、色块、分隔线）
     if HEADER_DECOS:
-        # 使用模板提取的装饰元素
         for x, y, w, h, c in HEADER_DECOS:
             r = slide.shapes.add_shape(1, Inches(x), Inches(y), Inches(w), Inches(h))
             r.fill.solid(); r.fill.fore_color.rgb = c; r.line.fill.background()
     else:
-        # 默认装饰：左侧色块 + 分隔线
         r = slide.shapes.add_shape(1, Inches(0.3), Inches(0.25), Inches(0.15), Inches(0.45))
         r.fill.solid(); r.fill.fore_color.rgb = ACCENT_COLOR; r.line.fill.background()
         l = slide.shapes.add_shape(1, Inches(0.6), Inches(0.68), Inches(12.1), Pt(1.5))
         l.fill.solid(); l.fill.fore_color.rgb = RGBColor(0xCC, 0xCC, 0xCC); l.line.fill.background()
 
-    # 页脚装饰条
+    # 2. 再画标题文字（在最上层）
+    T(slide, 0.5, 0.15, 12.3, 0.55, text, sz=TITLE_SIZE, bold=True, color=TITLE_COLOR)
+
+    # 3. 页脚装饰条
     for y, c, h in FOOTER_BARS:
         b = slide.shapes.add_shape(1, Inches(0), Inches(y), Inches(13.33), Inches(h))
         b.fill.solid(); b.fill.fore_color.rgb = c; b.line.fill.background()
