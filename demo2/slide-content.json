@@ -3,14 +3,14 @@
     "template_path": "./template.pptx",
     "output_path": "./demo_output.pptx",
     "figs_dir": "./figs",
-    "template_slide_indices": { "cover": 0, "toc": 1, "sections": [2,3,5,6], "thanks": 7 }
+    "template_slide_indices": { "cover": 0, "toc": 1, "sections": [2,3,4,5], "thanks": 7 }
   },
   "cover": {
     "title_en": "Attention Is All You Need",
     "presenter": "xxx",
     "date": "202X年X月"
   },
-  "toc_replacements": { "研究背景": "课题背景", "结论分析": "结果分析", "总结讨论": "讨论" },
+  "toc_replacements": {},
   "section_divider_edits": [
     { "number": "01", "title": "作者团队" },
     { "number": "02", "title": "课题背景" },
