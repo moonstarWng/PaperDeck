@@ -41,7 +41,10 @@ class OutlineEditor(ctk.CTkScrollableFrame):
         slides = []
         for sec in self.sections:
             if sec['type'] == 'keep':
-                slides.append({"type": "keep", "ref": sec['ref']})
+                keep = {"type": "keep", "ref": sec['ref']}
+                if sec.get('index') is not None:
+                    keep['index'] = sec['index']
+                slides.append(keep)
             elif sec['type'] == 'author':
                 slides.append(self._build_author_slide(sec))
             elif sec['type'] == 'background':
@@ -65,7 +68,8 @@ class OutlineEditor(ctk.CTkScrollableFrame):
         for slide in slides:
             st = slide.get('type', '')
             if st == 'keep':
-                result.append({'type': 'keep', 'ref': slide.get('ref', ''), 'expanded': False, 'rows': []})
+                result.append({'type': 'keep', 'ref': slide.get('ref', ''), 'expanded': False, 'rows': [],
+                               'index': slide.get('index')})
             elif st == 'author':
                 result.append({'type': 'author', 'expanded': True,
                     'rows': [

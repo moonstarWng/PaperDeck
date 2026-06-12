@@ -20,7 +20,7 @@ from ppt_layout import (
 )
 from ppt_slides import (
     build_author_slide, build_background_slide, build_summary_slide,
-    build_discussion1_slide, build_discussion2_slide,
+    build_discussion1_slide, build_discussion2_slide, build_paper_info_slide,
 )
 
 # PPTX 内部 XML 命名空间，用于直接操作幻灯片列表和文本元素
@@ -211,6 +211,7 @@ def build(config, json_path='.'):
         'summary': build_summary_slide,
         'discussion1': build_discussion1_slide,
         'discussion2': build_discussion2_slide,
+        'paper_info': build_paper_info_slide,
     }
 
     # ── 遍历构建计划，逐一创建幻灯片 ──

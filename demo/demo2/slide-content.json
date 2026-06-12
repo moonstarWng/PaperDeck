@@ -28,6 +28,12 @@
       "authors": "Ashish Vaswani | Noam Shazeer | Niki Parmar | Jakob Uszkoreit | Llion Jones | Aidan N. Gomez | Lukasz Kaiser | Illia Polosukhin",
       "prior_work": ["2014: Seq2Seq + Attention (Bahdanau et al., ICLR 2015)", "2016: ByteNet / ConvS2S (CNN for seq2seq)", "2017: Transformer — 第一个纯注意力机制的序列转换模型"]
     },
+    {
+      "type": "paper_info",
+      "pdf_path": "./demo_paper.pdf",
+      "paper_title": "Attention Is All You Need",
+      "extra_text": "Vaswani et al., NeurIPS 2017\n引用量: 100,000+\n现代 NLP 基础架构"
+    },
     { "type": "keep", "ref": "section", "index": 1 },
     {
       "type": "background",

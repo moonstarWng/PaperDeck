@@ -230,3 +230,68 @@ def build_discussion2_slide(prs, data):
     M(slide, 7.1, 1.8, 5.5, 4.5, right_items, sz=BODY_SIZE, color=DARK)
 
     return slide
+
+
+def build_paper_info_slide(prs, data):
+    """
+    论文信息页：左侧 PDF 首页截图 + 右侧原文链接（自动搜索）。
+    data: {pdf_path, paper_title, extra_text}
+    """
+    import urllib.request, urllib.parse
+    slide = prs.slides.add_slide(blank_layout(prs))
+    white_bg(slide)
+    title_bar(slide, '原文信息')
+
+    pdf_path = data.get('pdf_path', '')
+    paper_title = data.get('paper_title', '')
+    extra = data.get('extra_text', '')
+
+    # ── 左侧：PDF 首页渲染 ──
+    first_page_img = None
+    if pdf_path and os.path.exists(pdf_path):
+        try:
+            import pypdfium2 as pdfium
+            pdf = pdfium.PdfDocument(pdf_path)
+            bitmap = pdf[0].render(scale=1.5)
+            img_path = pdf_path.replace('.pdf', '_page1.jpg')
+            bitmap.to_pil().save(img_path, 'JPEG', quality=85)
+            first_page_img = img_path
+        except Exception as e:
+            print(f"  WARNING: PDF render: {e}")
+
+    if first_page_img:
+        P(slide, first_page_img, 0.3, 1.1, 5.8)
+    else:
+        T(slide, 0.5, 2.5, 5.5, 1.0, '(PDF 首页渲染失败)', sz=Pt(12), color=RGBColor(0x99, 0x99, 0x99))
+
+    # ── 右侧：原文链接（Semantic Scholar → Google Scholar fallback）──
+    link_lines = []
+    if paper_title:
+        try:
+            q = urllib.parse.quote(paper_title[:200])
+            u = f'https://api.semanticscholar.org/graph/v1/paper/search?query={q}&limit=1'
+            req = urllib.request.Request(u, headers={'User-Agent': 'PaperDeck/1.0'})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                import json as _json
+                d = _json.loads(resp.read())
+                if d.get('data'):
+                    p = d['data'][0]
+                    pid = p.get('paperId', '')
+                    eid = p.get('externalIds', {})
+                    link_lines.append(f'Semantic Scholar: https://api.semanticscholar.org/CorpusID:{pid}')
+                    if eid.get('DOI'):
+                        link_lines.append(f'DOI: https://doi.org/{eid["DOI"]}')
+                    if eid.get('ArXiv'):
+                        link_lines.append(f'arXiv: https://arxiv.org/abs/{eid["ArXiv"]}')
+        except Exception:
+            pass
+        if not link_lines:
+            q = urllib.parse.quote(paper_title[:200])
+            link_lines.append(f'Google Scholar: https://scholar.google.com/scholar?q={q}')
+
+    T(slide, 6.8, 1.2, 5.8, 0.4, '原文链接', sz=Pt(16), bold=True, color=TEAL)
+    M(slide, 6.8, 1.7, 5.8, 3.5, link_lines, sz=Pt(13), color=DARK)
+    if extra:
+        T(slide, 6.8, 4.8, 5.8, 1.5, extra, sz=Pt(12), color=RGBColor(0x66, 0x66, 0x66))
+
+    return slide
