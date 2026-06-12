@@ -129,13 +129,27 @@ def edit_cover(slide, cover_data, tmpl_path=''):
             r3.font.name = FONT_EN; r3.font.size = Pt(16)
 
 
-def edit_toc(slide, toc_map):
+def edit_toc(slide, toc_map, section_titles=None):
     """
     修改目录页文字。
-    通过遍历幻灯片 XML 中的所有 <a:t> 文本元素进行查找替换。
-    必须使用 XML 级别操作而非 python-pptx 的 shape 遍历，
-    因为目录页的文本分散在深层 GROUP 嵌套中，shape.has_text_frame 无法穿透。
+    toc_map: {旧文本: 新文本} 替换映射。为空时若提供 section_titles 则自动按顺序替换。
     """
+
+    # 自动构建映射：无 toc_map 但有 section_titles 时，按顺序替换 TOC 文本
+    if not toc_map and section_titles:
+        toc_items = []
+        for t_elem in slide._element.iter(f'{{{NS_A}}}t'):
+            if t_elem.text and t_elem.text.strip() and not t_elem.text.strip().isdigit():
+                txt = t_elem.text.strip()
+                if len(txt) >= 2 and txt not in [t.text.strip() for t in toc_items]:
+                    toc_items.append(t_elem)
+        # 跳过第一个（TOC 标题如 "CONTENTS"/"目录"），替换剩余
+        section_items = toc_items[1:] if len(toc_items) > len(section_titles) else toc_items
+        for i, t_elem in enumerate(section_items):
+            if i < len(section_titles):
+                t_elem.text = section_titles[i]
+        return
+
     if not toc_map:
         return
     for t_elem in slide._element.iter(f'{{{NS_A}}}t'):
@@ -284,7 +298,8 @@ def build(config, json_path='.'):
     if 'cover' in config:
         edit_cover(prs.slides[indices.get('cover', 0)], config['cover'], template_path)
     if 'toc_replacements' in config:
-        edit_toc(prs.slides[indices.get('toc', 1)], config['toc_replacements'])
+        stitles = [sde['title'] for sde in section_divider_map] if section_divider_map else None
+        edit_toc(prs.slides[indices.get('toc', 1)], config.get('toc_replacements', {}), stitles)
     for i, sde in enumerate(section_divider_map):
         if i < len(section_indices):
             edit_section_divider(prs.slides[section_indices[i]], sde['number'], sde['title'])

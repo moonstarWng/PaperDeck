@@ -163,8 +163,8 @@ def R(slide, l, t, w, h, fill_color, rounded=False, line_color=None):
     return rect
 
 
-def P(slide, path, l, t, w=None):
-    """添加图片，保持宽高比。"""
+def P(slide, path, l, t, w=None, max_h=None):
+    """添加图片，保持宽高比。可指定 max_h 限制高度不超过。"""
     if w is None: w = IMG_W
     if not os.path.exists(path):
         print(f"  WARNING: {path} not found"); return None
@@ -173,6 +173,9 @@ def P(slide, path, l, t, w=None):
         ratio = pic.height / pic.width
         pic.width = Inches(w)
         pic.height = int(Inches(w) * ratio)
+        if max_h and pic.height > Inches(max_h):
+            pic.height = Inches(max_h)
+            pic.width = int(Inches(max_h) / ratio)
         return pic
     except Exception as e:
         print(f"  ERROR adding {path}: {e}"); return None

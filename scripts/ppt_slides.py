@@ -260,7 +260,7 @@ def build_paper_info_slide(prs, data):
             print(f"  WARNING: PDF render: {e}")
 
     if first_page_img:
-        P(slide, first_page_img, 0.3, 1.1, 5.8)
+        P(slide, first_page_img, 0.3, 1.1, 5.8, max_h=5.5)
     else:
         T(slide, 0.5, 2.5, 5.5, 1.0, '(PDF 首页渲染失败)', sz=Pt(12), color=RGBColor(0x99, 0x99, 0x99))
 
