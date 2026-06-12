@@ -159,7 +159,6 @@ class OutlinePage(ctk.CTkFrame):
         except Exception as e:
             self.status.configure(text=f"生成失败: {e}", text_color="red")
 
-    # ── 构建 ──
     def _go_build(self):
         """从树形编辑器导出 JSON 并跳转到构建页。"""
         figs_dir = self.shared.get('figs_dir', '')
@@ -211,6 +210,9 @@ class OutlinePage(ctk.CTkFrame):
             ],
             "slides": slides
         }
+        # 规范化幻灯片顺序
+        slides = _normalize_slide_order(slides)
+
         self.shared['slide_content_json'] = json.dumps(full_config, indent=2, ensure_ascii=False)
         self.app.switch_to_tab("构建")
 
@@ -226,3 +228,44 @@ class OutlinePage(ctk.CTkFrame):
             messagebox.showerror("错误", "请先在配置页填写 API Key")
             return False
         return True
+
+
+# ═══════════════════════════════════════════
+# 模块级工具函数
+# ═══════════════════════════════════════════
+
+def _normalize_slide_order(slides):
+    """
+    规范化幻灯片顺序，确保：
+    - cover → toc → (section+content重复) → discussion → thanks
+    - thanks 始终在最后
+    - section dividers 不出现在 discussion 之后
+    """
+    if not slides:
+        return slides
+
+    result = []
+    thanks_items = []
+    discussion_items = []
+    section_indices = [0, 0, 0, 0]
+
+    for s in slides:
+        st = s.get('type', '')
+        if st == 'keep' and s.get('ref') == 'thanks':
+            thanks_items.append(s)
+        elif st in ('discussion1', 'discussion2'):
+            discussion_items.append(s)
+        elif st == 'keep' and s.get('ref') == 'section':
+            idx = s.get('index', 0)
+            if 0 <= idx < 4:
+                section_indices[idx] = len(result)
+            result.append(s)
+        else:
+            result.append(s)
+
+    # section 04 之后插入 discussion，thanks 放最后
+    sec4_pos = section_indices[3] if section_indices[3] > 0 else len(result)
+    for d in reversed(discussion_items):
+        result.insert(sec4_pos + 1, d)
+    result.extend(thanks_items)
+    return result
