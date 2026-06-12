@@ -3,7 +3,7 @@ build_portable.py — 一键构建 paper2ppt Embeddable 便携包。
 用户端无需 Python、无需 pip、无需联网。解压即用。
 
 用法: python build_portable.py
-输出: dist/Paper2PPT_vX.X.zip
+输出: dist/PaperDeck_vX.X.zip
 """
 import os, sys, shutil, zipfile, subprocess, urllib.request
 
@@ -210,7 +210,7 @@ def package_zip():
     """将便携包压缩为单个 zip 文件。"""
     print("[6/6] 打包为 ZIP...")
     os.makedirs(DIST_DIR, exist_ok=True)
-    zip_name = f"Paper2PPT_v{VERSION}_portable.zip"
+    zip_name = f"PaperDeck_v{VERSION}_portable.zip"
     zip_path = os.path.join(DIST_DIR, zip_name)
     if os.path.exists(zip_path):
         os.remove(zip_path)
@@ -239,7 +239,7 @@ def package_zip():
 def main():
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     print("=" * 50)
-    print(f"Paper2PPT v{VERSION} — 便携包构建")
+    print(f"PaperDeck v{VERSION} — 便携包构建")
     print("=" * 50)
 
     # 清理旧的 portable 目录

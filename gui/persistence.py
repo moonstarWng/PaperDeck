@@ -1,10 +1,10 @@
 """
 gui/persistence.py — 自动持久化：启动恢复上次状态，切换页面自动保存。
-数据存于 %APPDATA%/Paper2PPT/config.json
+数据存于 %APPDATA%/PaperDeck/config.json
 """
 import json, os, base64
 
-CONFIG_DIR = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'Paper2PPT')
+CONFIG_DIR = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'PaperDeck')
 CONFIG_PATH = os.path.join(CONFIG_DIR, 'config.json')
 
 DEFAULTS = {
