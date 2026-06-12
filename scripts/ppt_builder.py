@@ -49,7 +49,7 @@ def resolve_path(json_path, relative_path):
 # 模板幻灯片编辑器（仅修改文字，不修改任何图形元素）
 # ═══════════════════════════════════════════
 
-def edit_cover(slide, cover_data):
+def edit_cover(slide, cover_data, tmpl_path=''):
     """
     修改封面幻灯片文字。
     通过位置特征识别标题区域和汇报人区域，替换文字内容。
@@ -64,50 +64,69 @@ def edit_cover(slide, cover_data):
     presenter = cover_data.get('presenter', 'xxx')
     date = cover_data.get('date', '')
 
+    # 收集所有文本形状（用于智能识别标题和汇报人位置）
+    text_shapes = []
     for shape in slide.shapes:
-        if not shape.has_text_frame:
-            continue
-        # 将 EMU 单位转换为英寸进行比较
-        t = shape.top / 914400
-        l = shape.left / 914400
-        h = shape.height / 914400
-        w = shape.width / 914400
+        if shape.has_text_frame and shape.text_frame.text.strip():
+            t = shape.top / 914400
+            l = shape.left / 914400
+            w = shape.width / 914400
+            h = shape.height / 914400
+            text_shapes.append((shape, t, l, w, h, shape.text_frame.text.strip()))
 
-        # 标题区域：页面中上部的大文字框
-        if 2.0 < t < 3.0 and h > 1.0:
-            tf = shape.text_frame
-            tf.clear()
-            for i, line in enumerate(title_en.split('\n')):
-                p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-                r = p.add_run()
-                r.text = line
-                r.font.name = FONT_EN
-                r.font.size = Pt(32)
-                r.font.bold = True
+    if not text_shapes:
+        return
 
-        # 汇报人区域：右下角小文字框
-        if 5.0 < t < 6.0 and l > 5.0 and w < 4.0:
-            # 扩大文本框宽度，防止长文本被截断
-            shape.width = Inches(4.5)
-            tf = shape.text_frame
-            tf.clear()
-            p = tf.paragraphs[0]
-            # "汇报人：" 使用英文字体，姓名使用中文字体（匹配原始模板的混合字体模式）
-            r1 = p.add_run()
-            r1.text = '汇报人：'
-            r1.font.name = FONT_EN
-            r1.font.size = Pt(20)
-            r1.font.bold = True
-            r2 = p.add_run()
-            r2.text = f'{presenter}    '
-            r2.font.name = FONT_CN
-            r2.font.size = Pt(20)
-            r2.font.bold = True
-            if date:
-                r3 = p.add_run()
-                r3.text = date
-                r3.font.name = FONT_EN
-                r3.font.size = Pt(16)
+    # 标题 = 面积最大的文本框（宽度 > 3in 且高度 > 0.5in）
+    candidates = [s for s in text_shapes if s[3] > 3 and s[4] > 0.5]
+    title_shape = max(candidates, key=lambda s: s[3] * s[4]) if candidates else max(text_shapes, key=lambda s: len(s[5]))
+
+    # 汇报人 = 含关键词 或 下半部分小文本框
+    presenter_shape = None
+    for s in text_shapes:
+        txt = s[5].lower()
+        if '汇报人' in txt or 'presenter' in txt:
+            presenter_shape = s
+            break
+    if not presenter_shape:
+        small = [s for s in text_shapes if s[1] > 3.5 and s[3] < 6 and s[4] < 1.0 and s != title_shape]
+        if small:
+            presenter_shape = min(small, key=lambda s: s[3] * s[4])
+
+    # 标题字体：尝试从 design.json 读取 cover_title
+    title_font = FONT_EN
+    title_sz = Pt(32)
+    try:
+        import json as _json
+        dj = tmpl_path.replace('.pptx', '_design.json')
+        if os.path.exists(dj):
+            with open(dj, 'r', encoding='utf-8') as f:
+                ct = _json.load(f).get('cover_title', {})
+                if ct.get('font_name'): title_font = ct['font_name']
+                if ct.get('font_size_pt'): title_sz = Pt(ct['font_size_pt'])
+    except: pass
+
+    # 替换标题文字
+    tf = title_shape[0].text_frame; tf.clear()
+    for i, line in enumerate(title_en.split('\n')):
+        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        r = p.add_run(); r.text = line
+        r.font.name = title_font; r.font.size = title_sz; r.font.bold = True
+
+    # 替换汇报人文字
+    if presenter_shape:
+        ps = presenter_shape[0]
+        if ps.width / 914400 < 4.0:
+            ps.width = Inches(4.5)
+        tf = ps.text_frame; tf.clear()
+        p = tf.paragraphs[0]
+        r1 = p.add_run(); r1.text = '汇报人：'
+        r1.font.name = FONT_EN; r1.font.size = Pt(20); r1.font.bold = True
+        r2 = p.add_run(); r2.text = f'{presenter}    '
+        r2.font.name = FONT_CN; r2.font.size = Pt(20); r2.font.bold = True
+        if date:
+            r3 = p.add_run(); r3.text = date
+            r3.font.name = FONT_EN; r3.font.size = Pt(16)
 
 
 def edit_toc(slide, toc_map):
@@ -238,7 +257,7 @@ def build(config, json_path='.'):
     # ── 编辑模板幻灯片文字 ──
     print("Editing template slides...")
     if 'cover' in config:
-        edit_cover(prs.slides[indices.get('cover', 0)], config['cover'])
+        edit_cover(prs.slides[indices.get('cover', 0)], config['cover'], template_path)
     if 'toc_replacements' in config:
         edit_toc(prs.slides[indices.get('toc', 1)], config['toc_replacements'])
     for i, sde in enumerate(section_divider_map):
