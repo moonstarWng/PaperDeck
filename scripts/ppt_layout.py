@@ -303,7 +303,7 @@ def make_result_slide(prs, title, body_lines, img_specs, figs_dir='.'):
         text_h = img_end_y - area_top
 
     # 计算文字行距，使文字在文字区内垂直居中
-    line_h = 0.5  # 每行约占用 0.5in（含间距）
+    line_h = 1.0  # 每行占用 1.0in（宽松间距）
     total_text_h = n_lines * line_h
     if total_text_h < text_h:
         text_top += (text_h - total_text_h) / 2  # 居中偏移
