@@ -1,135 +1,113 @@
 # PaperDeck — 论文文献汇报 PPT 自动生成
 
-从论文 PDF 一键生成学术文献汇报 PPT。支持 Claude Code Agent 调用和命令行独立使用。
+> 论文 PDF → 双击启动 → 编辑大纲 → 一键生成 PPT。**不需要写代码。**
 
-## 5 步流水线
+## 快速上手（5 分钟）
+
+### 1. 下载 & 解压
+
+从 [Releases](https://github.com/moonstarWng/PaperDeck/releases) 下载 `PaperDeck_vX.X_portable.zip`，解压到任意目录。
 
 ```
-论文 PDF ──→  提取图片  ──→  手动截图  ──→  生成大纲  ──→  生成 PPT
-   │        (Python)     (你来做)     (AI 辅助)     (Python)
-   │
-   └──→  参考 PPTX  ──→  提取模板 (make-template)
+PaperDeck/
+├── 启动.bat          ← 双击启动
+├── python/            ← 内置 Python（不需要你装）
+└── ...
 ```
 
-| Step | 谁做 | 输入 | 输出 |
-|------|------|------|------|
-| 0. 生成模板 | Python | 参考汇报 PPTX | 设计骨架模板 (7-10 页) |
-| 1. 提取图片 | Python | 论文 PDF | `outputs/extracted/` 图片 |
-| 2. 分割子图 | **你** | 提取的整图 | `figs/` 按子图命名 |
-| 3. 生成大纲 | AI | 论文全文 | 结构化大纲 (待审批) |
-| 4. 生成 PPT | Python | 模板 + JSON + 图片 | 最终 PPTX |
+### 2. 准备材料
 
-## 快速开始
+| 你需要准备 | 说明 |
+|-----------|------|
+| 📄 论文 PDF | 要汇报的论文 |
+| 📊 模板 PPTX | 实验室/课题组的汇报模板（7-8 页骨架即可） |
+| 🖼️ 截图文件夹 | 论文图片的截图，命名规则见下方 |
 
-### 安装依赖
+### 3. 双击 `启动.bat`
 
+启动后看到三个标签页：
+
+```
+┌──────────────────────────────────────────┐
+│  [配置]    [大纲生成]    [构建]          │
+└──────────────────────────────────────────┘
+```
+
+### 4. 配置页 — 填入信息
+
+1. **论文 PDF** → 点「浏览」选择论文文件
+2. **模板 PPTX** → 点「浏览」选择模板 → 点「检测」
+   - 显示"✓ 已是模板骨架"→ 直接使用
+   - 显示"⚠ 检测到完整PPTX"→ 会自动提取模板骨架
+3. **图片目录** → 选择你截图好的 `figs/` 文件夹
+4. **LLM API** → 填入你的 API 地址、Key、模型名 → 点「测试连接」
+5. 点「下一步: 生成大纲 →」
+
+### 5. 大纲生成页 — AI 帮你写
+
+1. 点「读取论文」→ 自动读取全文，提取标题/期刊/作者
+2. 点「生成大纲」→ AI 生成完整大纲，自动填入树形编辑器
+3. **展开每个结果页**，检查修改：
+   - 标题对不对
+   - 3 个要点是否准确（可直接编辑）
+   - 配图是否匹配（点配图按钮选择 `figs/` 中的文件）
+4. 确认无误 → 点「构建 PPT →」
+
+### 6. 构建页 — 一键出稿
+
+点「▶ 开始构建」→ 等待几秒 → 点「打开文件夹」→ 找到生成的 PPTX。
+
+### 截图命名规则
+
+```
+figs/
+├── 1A.jpg          ← 图1的A子图
+├── 1DEF.jpg        ← 图1的D+E+F合并
+├── 2BC.jpg         ← 图2的B+C合并
+├── 3A.jpg          ← ...
+└── 5ABCD.jpg       ← 图5的A+B+C+D合并
+```
+
+格式：`{图号}{子图字母}.jpg`，子图可单个可合并。
+
+---
+
+## 需要 LLM API
+
+PaperDeck 本身不包含大模型。你需要一个 OpenAI 兼容的 API（任选其一）：
+
+| 服务 | 价格 | 获取方式 |
+|------|------|---------|
+| DeepSeek | ¥1/百万token | https://platform.deepseek.com |
+| SiliconFlow | 有免费额度 | https://siliconflow.cn |
+| 火山方舟 | 有免费模型 | https://console.volcengine.com/ark |
+
+---
+
+## 开发相关
+
+### 运行自测
 ```bash
-pip install python-pptx pypdf lxml Pillow
+python test_pipeline.py
+# 预期: 7/7 通过
 ```
 
-### 作为 Claude Code Agent
-
+### 构建便携包
 ```bash
-# 复制 Skill 到 Claude Code 技能目录
-cp -r . ~/.claude/skills/paper2ppt/
+python build_portable.py
+# → dist/PaperDeck_vX.X_portable.zip
 ```
 
-然后在 Claude Code 中输入 `/paper2ppt`，按 Agent 引导操作。
-
-### 命令行独立使用
-
-```bash
-# Step 0: 从参考 PPTX 提取设计模板
-python scripts/make_template.py 参考.pptx 模板.pptx
-
-# Step 1: 从论文 PDF 提取图片
-python scripts/extract_images.py 论文.pdf outputs/extracted/
-
-# Step 2: 手动截图子图，保存到 figs/ 目录
-#   命名规则: {图号}{子图字母}.jpg  如 1A.jpg, 1DEF.jpg, 5ABCD.jpg
-
-# Step 3: 创建 slide-content.json（参考 templates/example-slide-content.json）
-
-# Step 4: 验证并生成
-python scripts/validate_outline.py slide-content.json
-python scripts/ppt_builder.py slide-content.json
+### 项目结构
+```
+scripts/     CLI 脚本 (make_template, extract_images, ppt_builder, ...)
+gui/         GUI 代码 (customtkinter)
+demo/        示例论文 + 图片 + 模板
+templates/   JSON Schema + 参考示例
 ```
 
-## 文件结构
-
-```
-paper2ppt/
-├── SKILL.md                          # Claude Code Agent 定义
-├── prompt-base.txt                   # PPT 格式规范（用户原始 prompt）
-├── agent-prompt.txt                  # 补充规则（踩坑经验）
-├── scripts/
-│   ├── make_template.py              # 模板提取
-│   ├── extract_images.py             # PDF 图片提取
-│   ├── ppt_builder.py                # JSON → PPTX 构建器
-│   ├── ppt_layout.py                 # 布局工具库
-│   ├── ppt_slides.py                 # 特殊幻灯片构建器
-│   └── validate_outline.py           # JSON 验证
-└── templates/
-    ├── slide-content-schema.json     # JSON Schema
-    └── example-slide-content.json    # 完整示例
-```
-
-## slide-content.json 格式
-
-```jsonc
-{
-  "meta": {
-    "template_path": "./template/template.pptx",
-    "output_path": "./output.pptx",
-    "figs_dir": "./figs",
-    "template_slide_indices": { "cover": 0, "toc": 1, "sections": [2,3,5,6], "thanks": 7 }
-  },
-  "cover": {
-    "title_en": "Paper Title\nLine 2\nLine 3",
-    "presenter": "xxx",
-    "date": "202X年X月"
-  },
-  "slides": [
-    { "type": "keep", "ref": "cover" },
-    { "type": "keep", "ref": "toc" },
-    { "type": "keep", "ref": "section", "index": 0 },
-    { "type": "author", "journal": {...}, "institutions": [...], "authors": "..." },
-    { "type": "keep", "ref": "section", "index": 1 },
-    { "type": "background", "cards": [...], "hypothesis": "...", "experiment": "..." },
-    { "type": "keep", "ref": "section", "index": 2 },
-    { "type": "result", "title": "3.1 ...", "body": ["要点1", "要点2", "要点3"], "images": [...] },
-    // ... more result slides ...
-    { "type": "keep", "ref": "section", "index": 3 },
-    { "type": "discussion1", "title": "...", "items": [...] },
-    { "type": "discussion2", "title": "...", "left_items": [...], "right_items": [...] },
-    { "type": "keep", "ref": "thanks" }
-  ]
-}
-```
-
-完整 Schema: `templates/slide-content-schema.json`
-完整示例: `templates/example-slide-content.json`
-
-## 幻灯片类型
-
-| type | 说明 |
-|------|------|
-| `keep` | 保留模板幻灯片 (cover/toc/section/thanks) |
-| `author` | 作者团队页 — 卡片布局 |
-| `background` | 课题背景页 — 三色卡片 |
-| `result` | 结果页 — 左图右文，每行独立文本框 |
-| `summary` | 结果总结页 — 流程箭头图 |
-| `discussion1` | 讨论页 — 编号圆形列表 |
-| `discussion2` | 双栏页 — 局限性 vs 临床意义 |
-
-## PPT 规范
-
-- 正文 16pt Times New Roman，全中文
-- 图片宽度统一 5.5 英寸，左侧放置，保持原始宽高比
-- 每页 3 行要点，每行独立文本框带青色圆点
-- 模板封面/目录/章节页/致谢页保留原样，仅修改文字
-- 详见 `prompt-base.txt` 和 `agent-prompt.txt`
+### 开发规范
+见 [DEVELOPMENT.md](DEVELOPMENT.md)
 
 ## License
-
 MIT
