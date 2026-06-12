@@ -135,14 +135,13 @@ def copy_tkinter(python_dir):
         shutil.copytree(tcl_src, tcl_dst)
         print(f"  tcl/ -> python/tcl/")
 
-    # 2. 复制 tcl/tk DLLs 和 _tkinter.pyd (DLLs/ → python/DLLs/)
+    # 2. 复制所有 .pyd 和 .dll (DLLs/ → python/DLLs/) — tkinter 依赖多个 .pyd
     dlls_src = os.path.join(host_prefix, 'DLLs')
     dlls_dst = os.path.join(python_dir, 'DLLs')
     os.makedirs(dlls_dst, exist_ok=True)
     for f in os.listdir(dlls_src):
-        if f.startswith('_tkinter') or f.startswith('tcl') or f.startswith('tk'):
-            shutil.copy2(os.path.join(dlls_src, f), os.path.join(dlls_dst, f))
-            print(f"  DLLs/{f}")
+        shutil.copy2(os.path.join(dlls_src, f), os.path.join(dlls_dst, f))
+    print(f"  DLLs/ ({len(os.listdir(dlls_src))} files)")
 
     # 3. 复制 tkinter Python 包 → portable/Lib/ (._pth 已配置 ../Lib)
     tk_lib_src = os.path.join(host_prefix, 'Lib', 'tkinter')
