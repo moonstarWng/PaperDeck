@@ -1,15 +1,15 @@
 """
-gui/pages/build_page.py — 构建页：验证 JSON + 生成 PPT + 进度日志。
+gui/pages/build_page.py — 构建页：选择输出位置 + 验证 JSON + 生成 PPT + 进度日志。
 """
 import customtkinter as ctk
-import json, sys, os, threading, subprocess, tempfile
+import json, sys, os, threading, tempfile
 from tkinter import messagebox, filedialog
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 
 class BuildPage(ctk.CTkFrame):
-    """Tab 3: 构建触发 + 实时日志 + 输出管理。"""
+    """Tab 3: 构建触发 + 输出选择 + 实时日志。"""
 
     def __init__(self, master, shared, app):
         super().__init__(master)
@@ -29,14 +29,50 @@ class BuildPage(ctk.CTkFrame):
         self.open_btn = ctk.CTkButton(btn_frame, text="打开文件夹", width=100, command=self._open_folder)
         self.open_btn.pack(side="right", padx=5)
 
+        # ── 输出位置选择 ──
+        out_frame = ctk.CTkFrame(self)
+        out_frame.pack(fill="x", padx=10, pady=5)
+        ctk.CTkLabel(out_frame, text="输出位置:", width=70).pack(side="left", padx=5)
+        self.out_var = ctk.StringVar(value="")
+        self.out_entry = ctk.CTkEntry(out_frame, textvariable=self.out_var, width=400)
+        self.out_entry.pack(side="left", fill="x", expand=True, padx=5)
+        ctk.CTkButton(out_frame, text="浏览", width=60, command=self._browse_output).pack(side="right", padx=5)
+
         # ── 日志输出区 ──
         ctk.CTkLabel(self, text="构建日志", font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=15, pady=(5, 0))
-        self.log_text = ctk.CTkTextbox(self, height=400, font=ctk.CTkFont(family="Consolas", size=12))
+        self.log_text = ctk.CTkTextbox(self, height=350, font=ctk.CTkFont(family="Consolas", size=12))
         self.log_text.pack(fill="both", expand=True, padx=10, pady=5)
 
         # ── 状态 ──
         self.status = ctk.CTkLabel(self, text="就绪", text_color="gray")
         self.status.pack(anchor="w", padx=15, pady=5)
+
+        # 设置默认输出路径
+        self._set_default_output()
+
+    def _set_default_output(self):
+        """根据论文路径设置默认输出文件名。"""
+        pdf_path = self.shared.get('pdf_path', '')
+        if pdf_path:
+            base = os.path.splitext(os.path.basename(pdf_path))[0]
+            default = os.path.join(os.path.dirname(pdf_path), f'{base}_汇报.pptx')
+        else:
+            default = os.path.join(os.path.expanduser('~'), 'Desktop', 'output.pptx')
+        self.out_var.set(default)
+        self._last_dir = os.path.dirname(default)
+
+    def _browse_output(self):
+        """打开文件保存对话框选择输出位置。"""
+        initial_dir = self._last_dir if hasattr(self, '_last_dir') else os.path.expanduser('~/Desktop')
+        path = filedialog.asksaveasfilename(
+            title="选择输出位置",
+            initialdir=initial_dir,
+            defaultextension=".pptx",
+            filetypes=[("PowerPoint", "*.pptx"), ("All Files", "*.*")]
+        )
+        if path:
+            self.out_var.set(path)
+            self._last_dir = os.path.dirname(path)
 
     def _log(self, msg):
         """追加日志到文本区。"""
@@ -46,40 +82,49 @@ class BuildPage(ctk.CTkFrame):
 
     def _build(self):
         """开始构建流程：验证 → 构建。"""
-        # 获取 JSON
         json_str = self.shared.get('slide_content_json', '')
         if not json_str:
-            # 尝试从大纲页编辑区获取
             messagebox.showerror("错误", "请先在大纲页生成或编辑 slide-content.json")
             return
 
-        # 保存 JSON 到临时文件
         try:
             config = json.loads(json_str)
         except json.JSONDecodeError as e:
             messagebox.showerror("JSON 格式错误", str(e))
             return
 
-        # 确保路径正确 + 输出目录存在
+        # 获取用户选择的输出路径
+        output_path = self.out_var.get().strip()
+        if not output_path:
+            messagebox.showerror("错误", "请指定输出位置")
+            return
+
+        # 安全检查：目录是否存在
+        out_dir = os.path.dirname(output_path)
+        if out_dir and not os.path.exists(out_dir):
+            try:
+                os.makedirs(out_dir, exist_ok=True)
+                self._log(f"[目录] 已创建: {out_dir}")
+            except OSError as e:
+                messagebox.showerror("错误", f"无法创建输出目录:\n{e}")
+                return
+
+        # 安全检查：文件是否已存在
+        if os.path.exists(output_path):
+            ok = messagebox.askyesno("文件已存在", f"{os.path.basename(output_path)} 已存在。\n是否覆盖？")
+            if not ok:
+                return
+
+        # 检查目录是否可写
+        if out_dir and not os.access(out_dir, os.W_OK):
+            messagebox.showerror("错误", f"输出目录不可写:\n{out_dir}")
+            return
+
+        # 设置路径到配置
         config.setdefault('meta', {})
         config['meta']['template_path'] = self.shared.get('template_path', '')
         config['meta']['figs_dir'] = self.shared.get('figs_dir', '')
-        out = config['meta'].get('output_path', '')
-        # 如果 LLM 生成的输出路径不合法（含特殊字符或目录不存在），使用安全的默认路径
-        pdf_dir = os.path.dirname(self.shared.get('pdf_path', '')) or os.path.expanduser('~/Desktop')
-        safe_out = os.path.join(pdf_dir, 'output.pptx')
-        if not out or out == './output.pptx':
-            config['meta']['output_path'] = safe_out
-        else:
-            # 确保输出目录存在
-            out_dir = os.path.dirname(out)
-            if out_dir and not os.path.exists(out_dir):
-                config['meta']['output_path'] = safe_out
-            elif not out_dir:
-                config['meta']['output_path'] = os.path.join(pdf_dir, os.path.basename(out))
-        # 最终确保目录存在
-        final_dir = os.path.dirname(config['meta']['output_path'])
-        os.makedirs(final_dir, exist_ok=True)
+        config['meta']['output_path'] = output_path
 
         # 写入临时 JSON 文件
         tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8')
@@ -87,7 +132,8 @@ class BuildPage(ctk.CTkFrame):
         tmp_path = tmp.name
         tmp.close()
 
-        self._log(f"[开始] slide-content.json → {tmp_path}")
+        self.output_path = output_path
+        self._log(f"[开始] 输出 → {output_path}")
         self.build_btn.configure(state="disabled")
         self.status.configure(text="构建中...", text_color="gray")
         threading.Thread(target=self._do_build, args=(tmp_path,), daemon=True).start()
@@ -106,7 +152,7 @@ class BuildPage(ctk.CTkFrame):
             config = load_json(json_path)
             output = build(config, json_path)
             self.output_path = output
-            self._log(f"[完成] ✓ 输出: {output}")
+            self._log(f"[完成] ✓ {output}")
             self.status.configure(text=f"✓ 构建完成 → {output}", text_color="green")
         except Exception as e:
             self._log(f"[错误] {e}")
@@ -120,9 +166,11 @@ class BuildPage(ctk.CTkFrame):
 
     def _open_folder(self):
         """在资源管理器中打开输出文件夹。"""
-        if self.output_path and os.path.exists(self.output_path):
-            os.startfile(os.path.dirname(self.output_path))
-        elif self.output_path:
-            messagebox.showinfo("提示", f"文件尚未生成，路径: {self.output_path}")
+        path = self.output_path or self.out_var.get().strip()
+        out_dir = os.path.dirname(path) if path else ''
+        if out_dir and os.path.exists(out_dir):
+            os.startfile(out_dir)
+        elif path:
+            messagebox.showinfo("提示", "文件尚未生成")
         else:
-            messagebox.showinfo("提示", "尚未构建，无输出文件")
+            messagebox.showinfo("提示", "尚未构建")
