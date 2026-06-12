@@ -3,13 +3,17 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
+# Build artifacts
+build/
+dist/
+portable/
+*.spec
+
 # Output files
 outputs/
 output.pptx
 *.pptx
-
-# Except template examples
-!example/*.pptx
+!demo/template.pptx
 
 # IDE
 .vscode/
@@ -21,9 +25,8 @@ Thumbs.db
 
 # User data (may contain copyrighted material)
 paper/
-figs/
 *.pdf
-!example/*.pdf
+!demo/demo_paper.pdf
 
 # Temporary
 .paper2ppt_state.json
