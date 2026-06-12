@@ -57,6 +57,10 @@ class OutlineEditor(ctk.CTkScrollableFrame):
                 slides.append(self._build_discussion1_slide(sec))
             elif sec['type'] == 'discussion2':
                 slides.append(self._build_discussion2_slide(sec))
+            elif sec['type'] == 'paper_info':
+                rows = {k: v for k, v in sec.get('rows', [])}
+                slides.append({'type': 'paper_info', 'paper_title': rows.get('标题', ''),
+                               'extra_text': rows.get('备注', '')})
         return json.dumps({"slides": slides}, indent=2, ensure_ascii=False)
 
     # ═══════════════════════════════════════════
@@ -70,6 +74,11 @@ class OutlineEditor(ctk.CTkScrollableFrame):
             if st == 'keep':
                 result.append({'type': 'keep', 'ref': slide.get('ref', ''), 'expanded': False, 'rows': [],
                                'index': slide.get('index')})
+            elif st == 'paper_info':
+                result.append({'type': 'paper_info', 'expanded': True, 'rows': [
+                    ('标题', slide.get('paper_title', '')),
+                    ('备注', slide.get('extra_text', '')),
+                ]})
             elif st == 'author':
                 result.append({'type': 'author', 'expanded': True,
                     'rows': [

@@ -190,12 +190,34 @@ def build(config, json_path='.'):
     figs_dir = resolve_path(json_path, meta.get('figs_dir', './figs'))
     indices = meta.get('template_slide_indices', {})
 
-    # 加载模板设计令牌（自动查找 template_path 同目录的 _design.json）
+    # 加载模板设计令牌
     design_json = template_path.replace('.pptx', '_design.json')
     init_design(design_json)
 
     prs = Presentation(template_path)
     print(f"Template: {len(prs.slides)} slides")
+
+    # 自动检测模板幻灯片索引（如果 JSON 中未指定或指定了不完整的）
+    from make_template import classify
+    auto_indices = {'cover': 0, 'toc': 1, 'sections': [], 'thanks': len(prs.slides) - 1}
+    for i, slide in enumerate(prs.slides):
+        cat = classify(slide)
+        if cat == 'COVER':
+            auto_indices['cover'] = i
+        elif cat == 'TOC':
+            auto_indices['toc'] = i
+        elif cat.startswith('SECTION_'):
+            auto_indices['sections'].append(i)
+        elif cat == 'THANKS':
+            auto_indices['thanks'] = i
+    auto_indices['sections'].sort()
+    # JSON 中的值覆盖自动检测值（允许用户手动指定）
+    for key in ['cover', 'toc', 'thanks']:
+        if key in indices:
+            auto_indices[key] = indices[key]
+    if 'sections' in indices and indices['sections']:
+        auto_indices['sections'] = indices['sections']
+    indices = auto_indices
 
     slides_plan = config.get('slides', [])
     section_divider_map = config.get('section_divider_edits', [])
