@@ -231,6 +231,15 @@ def package_zip():
     print(f"  用户只需: 1. 解压  2. 双击 启动.bat")
     print(f"{'='*50}")
 
+    # 自动解压到 dist/ 同名目录，便于本地测试
+    extract_dir = os.path.join(DIST_DIR, f"PaperDeck_v{VERSION}_portable")
+    if os.path.exists(extract_dir):
+        shutil.rmtree(extract_dir)
+    print(f"\n[7/6] 自动解压 → {extract_dir}")
+    with zipfile.ZipFile(zip_path, 'r') as zf:
+        zf.extractall(extract_dir)
+    print(f"  解压完成，双击 {extract_dir}\\启动.bat 即可测试")
+
 
 # ═══════════════════════════════════════════
 # MAIN
