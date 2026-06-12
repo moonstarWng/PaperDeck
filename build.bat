@@ -1,11 +1,11 @@
 @echo off
-REM build.bat — 一键构建 PaperDeck 便携包并自动解压
+chcp 65001 >nul
 echo ========================================
-echo PaperDeck — 便携包构建
+echo PaperDeck - Portable Build
 echo ========================================
 echo.
 python build_portable.py
 echo.
-echo 解压完成 — dist\PaperDeck_v1.0_portable\
-echo 双击 启动.bat 即可运行
+echo Done - dist\PaperDeck_v1.0_portable\
+echo Double-click start.bat to launch
 pause
