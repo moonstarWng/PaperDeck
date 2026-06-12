@@ -1,0 +1,86 @@
+{
+  "meta": {
+    "source": "template.pptx",
+    "total_slides": 8
+  },
+  "content_title": {
+    "font_name": "Times New Roman",
+    "font_size_pt": 24,
+    "bold": true,
+    "color": "007191"
+  },
+  "content_body": {
+    "font_name": "Times New Roman",
+    "font_size_pt": 18,
+    "bold": false,
+    "color": "333333"
+  },
+  "footer_bars": [
+    {
+      "color": "A5A5A5",
+      "y_in": 7.2,
+      "h_in": 0.095
+    },
+    {
+      "color": "007191",
+      "y_in": 7.3,
+      "h_in": 0.2
+    }
+  ],
+  "header_decorations": [
+    {
+      "color": "007191",
+      "x_in": 0.3,
+      "y_in": 0.25,
+      "w_in": 0.15,
+      "h_in": 0.45
+    },
+    {
+      "color": "CCCCCC",
+      "x_in": 0.6,
+      "y_in": 0.68,
+      "w_in": 12.1,
+      "h_in": 0.021
+    }
+  ],
+  "cover_title": {
+    "font_name": "Times New Roman",
+    "font_size_pt": 32,
+    "bold": true,
+    "color": "FFFFFF"
+  },
+  "cover_presenter": {},
+  "cover_bg_color": "1A2E4A",
+  "section_number": {
+    "font_name": "Times New Roman",
+    "font_size_pt": 44,
+    "bold": true,
+    "color": "FFFFFF"
+  },
+  "section_title": {
+    "font_name": "Times New Roman",
+    "font_size_pt": 44,
+    "bold": true,
+    "color": "FFFFFF"
+  },
+  "section_bg_color": "1A2E4A",
+  "toc_number": {
+    "font_name": "Times New Roman",
+    "font_size_pt": 14,
+    "bold": true,
+    "color": "FFFFFF"
+  },
+  "toc_item": {
+    "font_name": "Times New Roman",
+    "font_size_pt": 22,
+    "bold": false,
+    "color": "333333"
+  },
+  "thanks_title": {
+    "font_name": "Times New Roman",
+    "font_size_pt": 200,
+    "bold": true,
+    "color": "FFFFFF"
+  },
+  "default_font": "Times New Roman"
+}
