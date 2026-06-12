@@ -143,11 +143,19 @@ class BuildPage(ctk.CTkFrame):
     def _do_build(self, json_path):
         """在后台线程中执行构建。"""
         try:
-            self._log("[验证] 检查 JSON 结构...")
+            self._log("[验证] 检查并修复 JSON...")
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'scripts'))
-            from validate_outline import validate
-            if not validate(json_path):
-                raise RuntimeError("JSON 验证失败")
+            from validate_outline import repair_and_validate
+            with open(json_path, 'r', encoding='utf-8') as f:
+                raw = f.read()
+            repaired_str, warnings = repair_and_validate(raw)
+            if repaired_str is None:
+                raise RuntimeError(f"JSON 无法修复: {warnings[0] if warnings else '未知错误'}")
+            for w in warnings:
+                self._log(f"[修复] {w}")
+            if warnings:
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    f.write(repaired_str)
 
             self._log("[构建] 开始生成 PPT...")
             from ppt_builder import load_json, build

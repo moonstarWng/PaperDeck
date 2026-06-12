@@ -112,6 +112,126 @@ def validate(json_path):
     return True
 
 
+def repair_and_validate(json_str):
+    """
+    尝试修复常见 LLM JSON 错误，返回 (repaired_json_str, warnings_list)。
+    修复项：
+      - 去除尾随逗号
+      - 修复 Markdown 代码块包裹
+      - 补全缺失的 meta 字段
+      - 补全 slides 中缺失的必需字段
+      - 修复 body 字段类型（字符串→列表）
+    """
+    warnings = []
+    data = None
+
+    # 1. 尝试解析 JSON
+    for attempt_name, fixed_str in _try_parse_fixes(json_str):
+        try:
+            data = json.loads(fixed_str)
+            if attempt_name != 'direct':
+                warnings.append(f'JSON 语法修复: {attempt_name}')
+            break
+        except json.JSONDecodeError:
+            continue
+
+    if data is None:
+        return None, ['JSON 无法解析，请检查语法']
+
+    # 2. 补全结构
+    if 'meta' not in data:
+        data['meta'] = {}
+        warnings.append('补全缺失字段: meta')
+    meta = data['meta']
+    for key, default in [('template_path', './template.pptx'), ('figs_dir', './figs'),
+                          ('output_path', './output.pptx')]:
+        if key not in meta:
+            meta[key] = default
+            warnings.append(f'补全缺失字段: meta.{key}')
+    if 'template_slide_indices' not in meta:
+        meta['template_slide_indices'] = {}
+        warnings.append('补全缺失字段: meta.template_slide_indices (将由构建器自动检测)')
+
+    if 'slides' not in data:
+        data['slides'] = []
+        warnings.append('补全缺失字段: slides (空数组)')
+
+    # 3. 修复每个 slide
+    for i, slide in enumerate(data['slides']):
+        st = slide.get('type', '')
+        if st == 'result':
+            if 'title' not in slide:
+                slide['title'] = f'结果 {i+1}'
+                warnings.append(f'slides[{i}]: 补全缺失 title')
+            if 'body' not in slide:
+                slide['body'] = ['要点1', '要点2', '要点3']
+                warnings.append(f'slides[{i}]: 补全缺失 body')
+            elif isinstance(slide['body'], str):
+                slide['body'] = [slide['body']]
+                warnings.append(f'slides[{i}]: body 字符串→列表')
+            if 'images' not in slide:
+                slide['images'] = []
+                warnings.append(f'slides[{i}]: 补全缺失 images')
+        elif st == 'author':
+            if 'journal' not in slide:
+                slide['journal'] = {'name': ''}
+        elif st == 'background':
+            if 'cards' not in slide:
+                slide['cards'] = []
+        elif st == 'summary':
+            if 'title' not in slide:
+                slide['title'] = '研究总结'
+            if 'flow_steps' not in slide:
+                slide['flow_steps'] = []
+        elif st == 'discussion1':
+            if 'items' not in slide:
+                slide['items'] = []
+        elif st == 'discussion2':
+            for key in ['left_title', 'left_items', 'right_title', 'right_items']:
+                if key not in slide:
+                    slide[key] = ''
+                    warnings.append(f'slides[{i}]: 补全缺失 {key}')
+
+    if 'cover' not in data:
+        data['cover'] = {'title_en': '', 'presenter': 'xxx', 'date': '202X年X月'}
+    if 'toc_replacements' not in data:
+        data['toc_replacements'] = {}
+    if 'section_divider_edits' not in data:
+        data['section_divider_edits'] = [
+            {'number': '01', 'title': '作者团队'},
+            {'number': '02', 'title': '课题背景'},
+            {'number': '03', 'title': '结果分析'},
+            {'number': '04', 'title': '讨论'},
+        ]
+
+    repaired_str = json.dumps(data, indent=2, ensure_ascii=False)
+    return repaired_str, warnings
+
+
+def _try_parse_fixes(json_str):
+    """尝试多种修复策略，生成器返回 (描述, 修复后字符串)。"""
+    yield ('direct', json_str)
+
+    # 去 Markdown 代码块
+    s = json_str.strip()
+    if s.startswith('```json'):
+        s = s.split('```json', 1)[1]
+        if '```' in s:
+            s = s.split('```', 1)[0]
+        yield ('去除```json标记', s.strip())
+    elif s.startswith('```'):
+        s = s[3:]
+        if s.endswith('```'):
+            s = s[:-3]
+        yield ('去除```标记', s.strip())
+
+    # 去除尾随逗号 (在 ] 或 } 之前的逗号)
+    import re
+    fixed = re.sub(r',\s*([}\]])', r'\1', json_str)
+    if fixed != json_str:
+        yield ('去除尾随逗号', fixed)
+
+
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print(f"Usage: python {sys.argv[0]} <slide-content.json>")
