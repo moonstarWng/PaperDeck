@@ -7,7 +7,7 @@ build_portable.py — 一键构建 paper2ppt Embeddable 便携包。
 """
 import os, sys, shutil, zipfile, subprocess, urllib.request
 
-PYTHON_VERSION = "3.11.9"
+PYTHON_VERSION = "3.13.9"
 PYTHON_EMBED_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
 PORTABLE_DIR = "portable"
 DIST_DIR = "dist"
@@ -120,9 +120,15 @@ def install_deps(pip_exe):
 # ═══════════════════════════════════════════
 
 def copy_tkinter(python_dir):
-    """将宿主 Python 的 tcl/tk 复制到 embeddable Python（embed 包不含 tkinter）。
-    关键：tcl/ 和 DLLs/ 放到 python/ 目录（与 python.exe 同级），
-    tkinter/ Python 模块放到便携 Lib/ 目录（._pth 已配置搜索此路径）。"""
+    """将宿主 Python 的 tcl/tk 注入 embeddable Python（embed 包不含 tkinter）。
+
+    策略（Python 版本匹配 3.13.9，避免版本混用导致 .pyd 不兼容）:
+      - tcl/ 运行时 → python/tcl/
+      - 宿主 DLLs/ 全部文件 → python/DLLs/
+        （._pth 中 ./DLLs 使 Python 优先从这找 .pyd/.dll；
+         Windows 搜索调用模块所在目录，依赖 DLL 都能找到）
+      - tkinter/ Python 包 → portable/Lib/tkinter/
+    """
     host_prefix = sys.prefix
     portable_lib = os.path.abspath(os.path.join(PORTABLE_DIR, 'Lib'))
 
@@ -135,13 +141,15 @@ def copy_tkinter(python_dir):
         shutil.copytree(tcl_src, tcl_dst)
         print(f"  tcl/ -> python/tcl/")
 
-    # 2. 复制所有 .pyd 和 .dll (DLLs/ → python/DLLs/) — tkinter 依赖多个 .pyd
+    # 2. 复制宿主 DLLs/ 全部文件 → python/DLLs/
+    # （tcl86t.dll 有额外的传递依赖，只复制个别文件不够）
     dlls_src = os.path.join(host_prefix, 'DLLs')
     dlls_dst = os.path.join(python_dir, 'DLLs')
-    os.makedirs(dlls_dst, exist_ok=True)
-    for f in os.listdir(dlls_src):
-        shutil.copy2(os.path.join(dlls_src, f), os.path.join(dlls_dst, f))
-    print(f"  DLLs/ ({len(os.listdir(dlls_src))} files)")
+    if os.path.exists(dlls_dst):
+        shutil.rmtree(dlls_dst)
+    shutil.copytree(dlls_src, dlls_dst)
+    n_dlls = len(os.listdir(dlls_dst))
+    print(f"  DLLs/ → python/DLLs/ ({n_dlls} files)")
 
     # 3. 复制 tkinter Python 包 → portable/Lib/ (._pth 已配置 ../Lib)
     tk_lib_src = os.path.join(host_prefix, 'Lib', 'tkinter')
@@ -187,12 +195,13 @@ def copy_project():
 # ═══════════════════════════════════════════
 
 def create_launcher():
-    """创建 启动.bat 启动脚本（._pth 已处理路径，此处仅设置编码并启动）。"""
+    """创建 启动.bat 启动脚本（._pth 处理 Python 模块路径，PATH 处理 Windows DLL 搜索）。"""
     print("[5/6] 创建启动脚本...")
-    bat_content = """@echo off
+    bat_content = r"""@echo off
 set PYTHONIOENCODING=utf-8
 cd /d "%~dp0"
-"%~dp0python\\python.exe" gui_app.py
+set PATH=%~dp0python\DLLs;%~dp0python;%PATH%
+"%~dp0python\python.exe" gui_app.py
 if errorlevel 1 pause
 """
     bat_path = os.path.join(PORTABLE_DIR, "启动.bat")
@@ -232,12 +241,16 @@ def package_zip():
 
     # 自动解压到 dist/ 同名目录，便于本地测试
     extract_dir = os.path.join(DIST_DIR, f"PaperDeck_v{VERSION}_portable")
-    if os.path.exists(extract_dir):
-        shutil.rmtree(extract_dir)
-    print(f"\n[7/6] 自动解压 → {extract_dir}")
-    with zipfile.ZipFile(zip_path, 'r') as zf:
-        zf.extractall(extract_dir)
-    print(f"  解压完成，双击 {extract_dir}\\启动.bat 即可测试")
+    try:
+        if os.path.exists(extract_dir):
+            shutil.rmtree(extract_dir)
+        print(f"\n[7/6] 自动解压 → {extract_dir}")
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            zf.extractall(extract_dir)
+        print(f"  解压完成，双击 {extract_dir}\\启动.bat 即可测试")
+    except PermissionError:
+        print(f"\n[7/6] 自动解压跳过（目录被占用，ZIP 已生成）")
+        print(f"  手动解压 {zip_path} 即可")
 
 
 # ═══════════════════════════════════════════
