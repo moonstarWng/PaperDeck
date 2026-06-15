@@ -171,7 +171,28 @@ class ConfigPage(ctk.CTkFrame):
             self.extract_progress.configure(text="")
 
     def _detect_template_llm(self, path):
-        """LLM 模式：用 LLM 做分类检测。"""
+        """LLM 模式：先用规则预检（含占位符识别），已是模板则跳过 LLM。"""
+        # 规则预检：占位符检测可以瞬间完成，避免 LLM 浪费
+        try:
+            from pptx import Presentation
+            prs = Presentation(path)
+            from scripts.make_template import classify
+            c_count, ph_count = 0, 0
+            for slide in prs.slides:
+                cat = classify(slide)
+                if cat in ('CONTENT', 'CONTENT_FRAME', 'DATA', 'DISCUSSION'):
+                    c_count += 1
+                    all_text = ' '.join(sh.text_frame.text for sh in slide.shapes if sh.has_text_frame)
+                    if '此处填充' in all_text or '章节标题' in all_text or '论文标题' in all_text:
+                        ph_count += 1
+            if c_count > 0 and ph_count / c_count > 0.5:
+                self.shared['is_template'] = True
+                self._update_extract_ui(True, 0.0)
+                self.tmpl_status.configure(text="✓ 已是模板骨架（检测到占位符），无需处理", text_color="green")
+                return
+        except Exception:
+            pass  # 规则预检失败则走 LLM
+
         url = self.url_entry.get().strip()
         key = self.key_entry.get().strip()
         model = self.model_entry.get().strip()
