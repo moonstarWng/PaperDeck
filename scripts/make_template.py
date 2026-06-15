@@ -246,6 +246,86 @@ def trim_slides(prs):
 
 
 # ═══════════════════════════════════════════
+# Step 5: 通用化模板文字
+# ═══════════════════════════════════════════
+
+def generalize_text(prs):
+    """
+    将非内容页中的具体文字替换为通用占位符。
+    封面标题 → "论文标题"，汇报人 → "汇报人：xxx"，
+    章节标题 → "章节标题"，目录项 → 保持编号但清空描述。
+    """
+    for slide in prs.slides:
+        cat = classify(slide)
+
+        if cat == 'COVER':
+            for shape in slide.shapes:
+                if not shape.has_text_frame:
+                    continue
+                text = shape.text_frame.text.strip()
+                if not text:
+                    continue
+
+                # 多行文字、长文字 → 标题占位
+                lines = text.split('\n')
+                is_title = (len(lines) >= 2 or len(text) > 15)
+                is_presenter = any(kw in text.lower() for kw in
+                                   ('presenter', '汇报人', '报告人', '演讲人', 'xxx'))
+
+                if is_presenter:
+                    # 保留 "汇报人：" 前缀，人名改为 xxx
+                    for para in shape.text_frame.paragraphs:
+                        for run in para.runs:
+                            if any(kw in run.text for kw in
+                                   ('presenter', '汇报人', '报告人', '演讲人')):
+                                run.text = '汇报人：'
+                            elif len(run.text.strip()) > 0 and run.text.strip() != ':':
+                                run.text = 'xxx'
+                elif is_title:
+                    # 大标题 → 占位
+                    tf = shape.text_frame
+                    tf.clear()
+                    p = tf.paragraphs[0]
+                    r = p.add_run()
+                    r.text = '论文标题'
+                    # 保留原字体大小
+                    try:
+                        r.font.size = shape.text_frame.paragraphs[0].runs[0].font.size
+                    except:
+                        pass
+
+        elif cat.startswith('SECTION_'):
+            for shape in slide.shapes:
+                if not shape.has_text_frame:
+                    continue
+                text = shape.text_frame.text.strip()
+                if not text or text.isdigit() or (len(text) <= 2 and text.isascii()):
+                    continue  # 保留数字编号
+                # 非数字文本 → 章节标题占位
+                tf = shape.text_frame
+                tf.clear()
+                p = tf.paragraphs[0]
+                r = p.add_run()
+                r.text = '章节标题'
+
+        elif cat == 'TOC':
+            for shape in slide.shapes:
+                if not shape.has_text_frame:
+                    continue
+                for para in shape.text_frame.paragraphs:
+                    for run in para.runs:
+                        t = run.text.strip()
+                        # 保留纯数字项 (01, 02...) 和 TOC 标题
+                        if t.isdigit() and len(t) <= 2:
+                            continue
+                        if t.upper() in ('CONTENTS', '目录', '目 录'):
+                            continue
+                        # 其余替换
+                        if len(t) > 2:
+                            run.text = '章节名称'
+
+
+# ═══════════════════════════════════════════
 # 主入口
 # ═══════════════════════════════════════════
 
@@ -278,6 +358,9 @@ def main():
 
     d = trim_slides(prs)
     print(f'  Slides removed (content + duplicates): {d}')
+
+    generalize_text(prs)
+    print(f'  Template text generalized')
 
     prs.save(dst)
     n1 = len(prs.slides)

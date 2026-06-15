@@ -5,7 +5,7 @@ build_portable.py — 一键构建 paper2ppt Embeddable 便携包。
 用法: python build_portable.py
 输出: dist/PaperDeck_vX.X.zip
 """
-import os, sys, shutil, zipfile, subprocess, urllib.request
+import os, sys, re, shutil, zipfile, subprocess, urllib.request
 
 PYTHON_VERSION = "3.13.9"
 PYTHON_EMBED_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
@@ -92,8 +92,7 @@ def install_pip(python_dir):
 # ═══════════════════════════════════════════
 
 def install_deps(pip_exe):
-    """pip install 所有依赖到便携包的 Lib 目录。"""
-    print("[3/6] 安装依赖 (仅首次需编译)...")
+    """pip install 所有依赖到便携包的 Lib 目录。已有包则跳过。"""
     deps = [
         "python-pptx",
         "pypdf",
@@ -104,7 +103,28 @@ def install_deps(pip_exe):
         "customtkinter",
     ]
     target = os.path.abspath(os.path.join(PORTABLE_DIR, "Lib"))
+    os.makedirs(target, exist_ok=True)
+
+    # 检测已安装的包，跳过无需重新安装的
+    existing = set()
+    for entry in os.listdir(target):
+        # 包目录名可能是 foo 或 foo-version.dist-info
+        name = re.split(r'-\d', entry)[0].lower().replace('_', '-')
+        existing.add(name)
+
+    missing = []
     for dep in deps:
+        if dep.lower().replace('_', '-') in existing:
+            print(f"  pip install {dep}... 跳过 (已安装)")
+        else:
+            missing.append(dep)
+
+    if not missing:
+        print("[3/6] 依赖已完整，跳过")
+        return
+
+    print(f"[3/6] 安装依赖 ({len(missing)} 个缺失)...")
+    for dep in missing:
         print(f"  pip install {dep}...")
         subprocess.run([
             os.path.abspath(pip_exe), "install", dep,
