@@ -60,15 +60,17 @@ class OutlinePage(ctk.CTkFrame):
         for title, pages in self._default_sections:
             self._add_section_row(title, pages, True)
 
-        # 添加/删除按钮
+        # 操作按钮
         btn_row = ctk.CTkFrame(self.sections_frame)
         btn_row.pack(fill="x", padx=5, pady=2)
         ctk.CTkButton(btn_row, text="+ 添加章节", width=80, height=24,
                        command=lambda: self._add_section_row('新章节', '1', True)).pack(side="left", padx=5)
+        ctk.CTkButton(btn_row, text="恢复默认", width=70, height=24,
+                       command=self._reset_sections).pack(side="left", padx=5)
 
         # 论文信息页（独立开关）
         self.paper_info_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(self.sections_frame, text="☐ 附加论文信息页（PDF首页 + 原文链接）",
+        ctk.CTkCheckBox(self.sections_frame, text="附加论文信息页（PDF首页 + 原文链接）",
                          variable=self.paper_info_var).pack(anchor="w", padx=5, pady=(5, 0))
 
         # ── 论文信息区 ──
@@ -96,11 +98,16 @@ class OutlinePage(ctk.CTkFrame):
     def _add_section_row(self, title, pages, enabled):
         """添加一行章节配置。"""
         row = ctk.CTkFrame(self.sections_frame)
-        # 插入到添加按钮之前（倒数第二个子元素）
-        children = self.sections_frame.winfo_children()
-        if len(children) >= 2:
-            btn_row = children[-2]  # 按钮行是倒数第二个（最后是 paper_info checkbox）
-            row.pack(fill="x", padx=5, pady=1, before=btn_row)
+        # 插入到按钮行之前
+        for child in self.sections_frame.winfo_children():
+            if isinstance(child, ctk.CTkFrame) and child != row:
+                for sub in child.winfo_children():
+                    if isinstance(sub, ctk.CTkButton) and '+ 添加' in (sub.cget('text') or ''):
+                        row.pack(fill="x", padx=5, pady=1, before=child)
+                        break
+                else:
+                    continue
+                break
         else:
             row.pack(fill="x", padx=5, pady=1)
 
@@ -114,10 +121,40 @@ class OutlinePage(ctk.CTkFrame):
         ctk.CTkOptionMenu(row, values=["1", "2", "3", "4", "5", "6"],
                           variable=count_var, width=45).pack(side="left", padx=2)
 
+        # 上移/下移
+        ctk.CTkButton(row, text="↑", width=25, height=24,
+                       command=lambda r=row: self._move_section_row(r, -1)).pack(side="right", padx=1)
+        ctk.CTkButton(row, text="↓", width=25, height=24,
+                       command=lambda r=row: self._move_section_row(r, 1)).pack(side="right", padx=1)
         ctk.CTkButton(row, text="×", width=25, height=24, fg_color="#D94F4F",
-                       command=lambda: self._remove_section_row(row)).pack(side="right", padx=2)
+                       command=lambda r=row: self._remove_section_row(r)).pack(side="right", padx=2)
 
         self.section_rows.append((enable_var, title_var, count_var, row))
+
+    def _move_section_row(self, row, direction):
+        """上移(-1)或下移(+1)一行。"""
+        for i, (ev, tv, cv, r) in enumerate(self.section_rows):
+            if r == row:
+                new_i = i + direction
+                if 0 <= new_i < len(self.section_rows):
+                    self.section_rows[i], self.section_rows[new_i] = \
+                        self.section_rows[new_i], self.section_rows[i]
+                    # 重新 pack 到正确顺序
+                    for _, _, _, rr in self.section_rows:
+                        rr.pack_forget()
+                    btn_row = None
+                    for child in self.sections_frame.winfo_children():
+                        if isinstance(child, ctk.CTkFrame):
+                            for sub in child.winfo_children():
+                                if isinstance(sub, ctk.CTkButton) and '+ 添加' in sub.cget('text'):
+                                    btn_row = child
+                                    break
+                    for _, _, _, rr in self.section_rows:
+                        if btn_row:
+                            rr.pack(fill="x", padx=5, pady=1, before=btn_row)
+                        else:
+                            rr.pack(fill="x", padx=5, pady=1)
+                break
 
     def _remove_section_row(self, row):
         """删除一行章节配置。"""
@@ -134,6 +171,14 @@ class OutlinePage(ctk.CTkFrame):
             if enable_var.get():
                 config.append((title_var.get().strip() or '章节', int(count_var.get() or '1')))
         return config
+
+    def _reset_sections(self):
+        """恢复默认章节配置。"""
+        for _, _, _, row in self.section_rows:
+            row.destroy()
+        self.section_rows.clear()
+        for title, pages in self._default_sections:
+            self._add_section_row(title, pages, True)
 
     # ── 读取论文 ──
     def _read_paper(self):
@@ -299,6 +344,22 @@ class OutlinePage(ctk.CTkFrame):
 
         # ── 根据用户配置的章节动态生成 ──
         sections = self._get_section_config()
+        if not sections:
+            messagebox.showerror("错误", "请至少配置一个章节")
+            return
+
+        # 检查模板章节页是否足够
+        tmpl_path = self.shared.get('template_path', '')
+        if tmpl_path and os.path.exists(tmpl_path):
+            from pptx import Presentation
+            from scripts.make_template import classify
+            prs = Presentation(tmpl_path)
+            tmpl_section_count = sum(1 for s in prs.slides if classify(s).startswith('SECTION_'))
+            if len(sections) > tmpl_section_count:
+                messagebox.showwarning("章节页不足",
+                    f"你配置了 {len(sections)} 个章节，但模板只有 {tmpl_section_count} 个章节页。\n"
+                    f"超出部分将复用最后一个章节页。")
+
         section_divider_edits = []
         for i, (title, _) in enumerate(sections):
             section_divider_edits.append({
