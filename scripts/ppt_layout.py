@@ -55,6 +55,72 @@ def _hex_to_rgb(h):
     return RGBColor(int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
 
+# ═══════════════════════════════════════════
+# 色板生成工具
+# ═══════════════════════════════════════════
+
+def _tint(rgb, factor=0.8):
+    """与白色混合，factor 控制混合比例 (0=纯白, 1=原色)。"""
+    return RGBColor(
+        int((1 - factor) * 255 + factor * rgb[0]),
+        int((1 - factor) * 255 + factor * rgb[1]),
+        int((1 - factor) * 255 + factor * rgb[2]),
+    )
+
+
+def _shade(rgb, factor=0.7):
+    """与黑色混合，factor 控制混合比例 (0=纯黑, 1=原色)。"""
+    return RGBColor(
+        int(factor * rgb[0]),
+        int(factor * rgb[1]),
+        int(factor * rgb[2]),
+    )
+
+
+def _luminance(rgb):
+    """W3C 相对亮度 (sRGB → 线性 → 加权)。"""
+    def _c(c):
+        v = c / 255.0
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    return 0.2126 * _c(rgb[0]) + 0.7152 * _c(rgb[1]) + 0.0722 * _c(rgb[2])
+
+
+def contrast_text(rgb):
+    """返回该底色上可读的文字色（白或黑），W3C 对比度 ≥ 4.5:1。"""
+    L = _luminance(rgb)
+    # 白色对比度: (1.0 + 0.05) / (L + 0.05)
+    # 黑色对比度: (L + 0.05) / (0 + 0.05)
+    white_contrast = 1.05 / (L + 0.05)
+    black_contrast = (L + 0.05) / 0.05
+    return WHITE if white_contrast > black_contrast else DARK
+
+
+# ═══════════════════════════════════════════
+# 主题色板（被 derive_palette() 覆盖）
+# ═══════════════════════════════════════════
+
+PALETTE_PRIMARY = TEAL       # 主题主色 → 卡片顶条、编号圆、重点标记
+PALETTE_LIGHT = LIGHT_TEAL   # 主色浅变体 → 卡片背景
+PALETTE_DARK = NAVY          # 暗色 → 章节页背景
+PALETTE_WARM = LIGHT_GREEN   # 暖灰/第二卡片背景
+PALETTE_ACCENT2 = GREEN_ACCENT  # 第二强调色
+
+
+def derive_palette(primary_rgb, dark_rgb=None):
+    """
+    从主色自动生成一套协调色板（替代硬编码的 teal/green 默认值）。
+    色调跟随主题，浅变体做卡片背景，暗色做章节页。
+    """
+    global PALETTE_PRIMARY, PALETTE_LIGHT, PALETTE_DARK, PALETTE_WARM, PALETTE_ACCENT2
+
+    PALETTE_PRIMARY = primary_rgb
+    PALETTE_LIGHT = _tint(primary_rgb, 0.12)       # 极浅 → 卡片背景
+    PALETTE_DARK = dark_rgb if dark_rgb else _shade(primary_rgb, 0.15)
+    # 暖灰：取主色的低饱和暖调偏移（HSV 色相不变，降饱和）
+    PALETTE_WARM = RGBColor(245, 240, 235)          # 中性暖灰，与暖色主题均协调
+    PALETTE_ACCENT2 = _shade(primary_rgb, 0.7)      # 深变体 → 第二强调
+
+
 def init_design(json_path):
     """
     从 template_design.json 加载设计令牌，覆盖模块级默认值。
@@ -106,6 +172,56 @@ def init_design(json_path):
                 dec.get('w_in', 0.15), dec.get('h_in', 0.45),
                 _hex_to_rgb(dec.get('color', '007191'))
             ))
+
+    # ── 主题色板推导 ──
+    # 从设计令牌中提取主色和暗色，自动生成协调色板
+    def _is_accent(c_hex):
+        """判断是否为有彩度的强调色（排除灰、近黑、近白）。"""
+        if c_hex in ('A5A5A5', 'CCCCCC', '999999', '888888', 'DDDDDD', 'EEEEEE'):
+            return False
+        rgb = _hex_to_rgb(c_hex)
+        r, g, b = rgb[0], rgb[1], rgb[2]
+        # 排除近黑 (max < 35)、近白 (min > 230)、低饱和灰色 (max-min < 20)
+        if max(r, g, b) < 35 or min(r, g, b) > 230 or max(r, g, b) - min(r, g, b) < 20:
+            return False
+        return True
+
+    primary = None
+    dark_bg = None
+    # 1. 主色：从 header_decorations 找有彩度的强调色
+    for dec in (decos or []):
+        c = dec.get('color', '')
+        if _is_accent(c):
+            primary = _hex_to_rgb(c)
+            break
+    # 2. 否则从 footer_bars 找
+    if primary is None:
+        for b in (d.get('footer_bars', []) or []):
+            c = b.get('color', '')
+            if _is_accent(c):
+                primary = _hex_to_rgb(c)
+                break
+    # 3. 暗色：章节页背景 / 封面背景
+    for key in ('section_bg_color', 'cover_bg_color'):
+        if d.get(key):
+            dark_bg = _hex_to_rgb(d[key])
+            break
+    # 4. 如果还是没有主色，用第一个 header 装饰的非全幅条
+    if primary is None and decos:
+        for dec in decos:
+            if dec.get('w_in', 0) < 5:
+                c = dec.get('color', '007191')
+                primary = _hex_to_rgb(c)
+                # 如果取到的还是近黑/灰，fallback 到默认
+                if not _is_accent(c):
+                    primary = None
+                break
+
+    if primary:
+        derive_palette(primary, dark_bg)
+        ACCENT_COLOR = primary
+        if TITLE_COLOR == WHITE or TITLE_COLOR == _hex_to_rgb('FFFFFF'):
+            TITLE_COLOR = primary
 
 
 def parse_color(val):

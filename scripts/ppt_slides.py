@@ -11,9 +11,10 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ppt_layout import (
     T, M, R, P, title_bar, white_bg, blank_layout,
-    TEAL, DARK, WHITE, NAVY, LIGHT_TEAL, LIGHT_GREEN,
-    RED_ACCENT, GREEN_ACCENT, GOLD, ORANGE, BLUE_SLATE, BLUE_DEEP,
-    COLOR_MAP, parse_color, BODY_SIZE, FONT_EN, FONT_CN
+    TEAL, DARK, WHITE, NAVY,  # 保留旧常量供 fallback
+    COLOR_MAP, parse_color, contrast_text,
+    BODY_SIZE, FONT_EN, FONT_CN,
+    PALETTE_PRIMARY, PALETTE_LIGHT, PALETTE_DARK, PALETTE_WARM, PALETTE_ACCENT2,
 )
 
 
@@ -38,8 +39,8 @@ def build_author_slide(prs, data):
     prior_work = data.get('prior_work', [])
 
     # ── 左上卡片：期刊信息 ──
-    R(slide, 0.4, 1.1, 5.8, 2.5, LIGHT_TEAL, rounded=True)  # 卡片背景
-    R(slide, 0.4, 1.1, 5.8, 0.5, TEAL)                      # 卡片顶部色条
+    R(slide, 0.4, 1.1, 5.8, 2.5, PALETTE_LIGHT, rounded=True)  # 卡片背景
+    R(slide, 0.4, 1.1, 5.8, 0.5, PALETTE_PRIMARY)             # 卡片顶部色条
     T(slide, 0.6, 1.15, 5.4, 0.4, '  期刊信息', sz=Pt(18), bold=True, color=WHITE)
     # 动态拼接期刊信息：名称、IF、日期、DOI
     M(slide, 0.7, 1.8, 5.2, 1.5, [
@@ -49,16 +50,16 @@ def build_author_slide(prs, data):
     ], sz=BODY_SIZE, color=DARK)
 
     # ── 右上卡片：研究机构 ──
-    R(slide, 6.6, 1.1, 6.3, 2.5, LIGHT_GREEN, rounded=True)
-    R(slide, 6.6, 1.1, 6.3, 0.5, GREEN_ACCENT)              # 绿色顶部色条（与左侧区分）
+    R(slide, 6.6, 1.1, 6.3, 2.5, PALETTE_WARM, rounded=True)
+    R(slide, 6.6, 1.1, 6.3, 0.5, PALETTE_ACCENT2)           # 第二强调色顶部色条
     T(slide, 6.8, 1.15, 5.9, 0.4, '  研究机构', sz=Pt(18), bold=True, color=WHITE)
     M(slide, 6.9, 1.8, 5.8, 1.5, institutions, sz=BODY_SIZE, color=DARK)
 
     # ── 底部通栏：通讯作者 + 前期基础 ──
-    R(slide, 0.4, 3.9, 12.5, 3.0, LIGHT_TEAL, rounded=True)
-    T(slide, 0.7, 4.0, 5.0, 0.4, '  通讯作者', sz=Pt(18), bold=True, color=TEAL)
-    T(slide, 0.7, 4.5, 11.8, 0.4, authors, sz=BODY_SIZE, bold=True, color=TEAL)
-    T(slide, 0.7, 5.1, 5.0, 0.4, '  课题组前期研究基础', sz=BODY_SIZE, bold=True, color=TEAL)
+    R(slide, 0.4, 3.9, 12.5, 3.0, PALETTE_LIGHT, rounded=True)
+    T(slide, 0.7, 4.0, 5.0, 0.4, '  通讯作者', sz=Pt(18), bold=True, color=PALETTE_PRIMARY)
+    T(slide, 0.7, 4.5, 11.8, 0.4, authors, sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
+    T(slide, 0.7, 5.1, 5.0, 0.4, '  课题组前期研究基础', sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
     if prior_work:
         M(slide, 0.7, 5.5, 11.8, 1.2, prior_work, sz=BODY_SIZE, color=DARK)
 
@@ -84,7 +85,7 @@ def build_background_slide(prs, data):
     for i, card in enumerate(cards):
         cx = 0.45 + i * 4.22                     # 水平起始位置
         color = parse_color(card.get('color', 'teal'))
-        R(slide, cx, 1.15, 3.95, 3.6, LIGHT_TEAL, rounded=True)  # 卡片背景
+        R(slide, cx, 1.15, 3.95, 3.6, PALETTE_LIGHT, rounded=True)  # 卡片背景
         R(slide, cx, 1.15, 3.95, 0.55, color)                    # 彩色标题条
         T(slide, cx + 0.2, 1.2, 3.5, 0.45, card['title'], sz=Pt(20), bold=True, color=WHITE)
         # body 中的 \n 换行符需要显式 split 后传入 M()
@@ -95,8 +96,8 @@ def build_background_slide(prs, data):
     hypothesis = data.get('hypothesis', '')
     experiment = data.get('experiment', '')
     if hypothesis or experiment:
-        R(slide, 0.45, 5.05, 12.4, 1.8, LIGHT_TEAL, rounded=True)
-        T(slide, 0.7, 5.15, 11.9, 0.4, '核心假说与实验设计', sz=Pt(18), bold=True, color=TEAL)
+        R(slide, 0.45, 5.05, 12.4, 1.8, PALETTE_LIGHT, rounded=True)
+        T(slide, 0.7, 5.15, 11.9, 0.4, '核心假说与实验设计', sz=Pt(18), bold=True, color=PALETTE_PRIMARY)
         lines = []
         if hypothesis:
             lines.append('假说: ' + hypothesis)
@@ -139,7 +140,7 @@ def build_summary_slide(prs, data):
                sz=Pt(11), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
             # 步骤之间添加右箭头符号
             if i < n - 1:
-                T(slide, x + bw + 0.005, 1.4, 0.1, 0.4, '→', sz=Pt(22), bold=True, color=TEAL, align=PP_ALIGN.CENTER)
+                T(slide, x + bw + 0.005, 1.4, 0.1, 0.4, '→', sz=Pt(22), bold=True, color=PALETTE_PRIMARY, align=PP_ALIGN.CENTER)
 
     # ── 中部证据卡片 ──
     evidence_cards = data.get('evidence_cards', [])
@@ -148,15 +149,15 @@ def build_summary_slide(prs, data):
         cw = min(3.95, (12.5 - (nc - 1) * 0.1) / nc)
         for i, card in enumerate(evidence_cards):
             cx = 0.45 + i * (cw + 0.1)
-            R(slide, cx, 2.55, cw, 1.35, LIGHT_TEAL, rounded=True)
-            T(slide, cx + 0.2, 2.65, cw - 0.4, 0.35, card['title'], sz=BODY_SIZE, bold=True, color=TEAL)
+            R(slide, cx, 2.55, cw, 1.35, PALETTE_LIGHT, rounded=True)
+            T(slide, cx + 0.2, 2.65, cw - 0.4, 0.35, card['title'], sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
             T(slide, cx + 0.2, 3.05, cw - 0.4, 0.7, card['detail'], sz=BODY_SIZE, color=DARK)
 
     # ── 底部结论横幅 ──
     conclusions = data.get('conclusions', [])
     if conclusions:
-        R(slide, 0.45, 4.2, 12.4, 2.7, LIGHT_TEAL, rounded=True)
-        T(slide, 0.7, 4.3, 11.9, 0.35, '核心结论', sz=Pt(18), bold=True, color=TEAL)
+        R(slide, 0.45, 4.2, 12.4, 2.7, PALETTE_LIGHT, rounded=True)
+        T(slide, 0.7, 4.3, 11.9, 0.35, '核心结论', sz=Pt(18), bold=True, color=PALETTE_PRIMARY)
         M(slide, 0.7, 4.7, 11.9, 2.0, conclusions, sz=BODY_SIZE, color=DARK)
 
     return slide
@@ -181,11 +182,11 @@ def build_discussion1_slide(prs, data):
         y = 1.15 + i * 1.48                           # 每条目的垂直位置
         # 青色圆形编号标记（形状类型 9 = 椭圆）
         c = slide.shapes.add_shape(9, Inches(0.55), Inches(y + 0.1), Inches(0.5), Inches(0.5))
-        c.fill.solid(); c.fill.fore_color.rgb = TEAL; c.line.fill.background()
+        c.fill.solid(); c.fill.fore_color.rgb = PALETTE_PRIMARY; c.line.fill.background()
         T(slide, 0.55, y + 0.15, 0.5, 0.4, item.get('number', str(i + 1)),
            sz=Pt(14), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
         # 标题
-        T(slide, 1.25, y, 3.0, 0.4, item['title'], sz=BODY_SIZE, bold=True, color=TEAL)
+        T(slide, 1.25, y, 3.0, 0.4, item['title'], sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
         # 详细描述
         T(slide, 1.25, y + 0.4, 11.5, 0.85, item['detail'], sz=BODY_SIZE, color=DARK)
         # 分隔线（最后一项不加）
@@ -220,13 +221,13 @@ def build_discussion2_slide(prs, data):
     right_items = data.get('right_items', [])
 
     # 左栏
-    R(slide, 0.4, 1.1, 6.0, 5.5, LIGHT_TEAL, rounded=True)
-    T(slide, 0.7, 1.25, 5.4, 0.4, left_title, sz=Pt(20), bold=True, color=TEAL)
+    R(slide, 0.4, 1.1, 6.0, 5.5, PALETTE_LIGHT, rounded=True)
+    T(slide, 0.7, 1.25, 5.4, 0.4, left_title, sz=Pt(20), bold=True, color=PALETTE_PRIMARY)
     M(slide, 0.7, 1.8, 5.4, 4.5, left_items, sz=BODY_SIZE, color=DARK)
 
     # 右栏
-    R(slide, 6.8, 1.1, 6.1, 5.5, LIGHT_GREEN, rounded=True)
-    T(slide, 7.1, 1.25, 5.5, 0.4, right_title, sz=Pt(20), bold=True, color=GREEN_ACCENT)
+    R(slide, 6.8, 1.1, 6.1, 5.5, PALETTE_WARM, rounded=True)
+    T(slide, 7.1, 1.25, 5.5, 0.4, right_title, sz=Pt(20), bold=True, color=PALETTE_ACCENT2)
     M(slide, 7.1, 1.8, 5.5, 4.5, right_items, sz=BODY_SIZE, color=DARK)
 
     return slide
@@ -289,7 +290,7 @@ def build_paper_info_slide(prs, data):
             q = urllib.parse.quote(paper_title[:200])
             link_lines.append(f'Google Scholar: https://scholar.google.com/scholar?q={q}')
 
-    T(slide, 6.8, 1.2, 5.8, 0.4, '原文链接', sz=Pt(16), bold=True, color=TEAL)
+    T(slide, 6.8, 1.2, 5.8, 0.4, '原文链接', sz=Pt(16), bold=True, color=PALETTE_PRIMARY)
     M(slide, 6.8, 1.7, 5.8, 3.5, link_lines, sz=Pt(13), color=DARK)
     if extra:
         T(slide, 6.8, 4.8, 5.8, 1.5, extra, sz=Pt(12), color=RGBColor(0x66, 0x66, 0x66))
