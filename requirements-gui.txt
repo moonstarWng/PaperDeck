@@ -6,3 +6,4 @@ pdfplumber
 lxml
 Pillow
 requests
+pytest
