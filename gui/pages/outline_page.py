@@ -337,6 +337,15 @@ class OutlinePage(ctk.CTkFrame):
     def _load_llm_result(self, result):
         """在主线程加载 LLM 结果到编辑器。"""
         self.editor.set_figs_dir(self.shared.get('figs_dir', ''))
+        # 保存原始输出以备排查
+        pdf_path = self.shared.get('pdf_path', '')
+        if pdf_path:
+            raw_path = os.path.join(os.path.dirname(pdf_path), 'slide-content-raw.json')
+            try:
+                with open(raw_path, 'w', encoding='utf-8') as f:
+                    f.write(result)
+            except Exception:
+                pass
         ok = self.editor.load_from_json(result)
         if ok:
             self.status.configure(text="✓ 大纲已生成，可展开编辑后点击「构建 PPT」", text_color="green")

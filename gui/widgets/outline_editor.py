@@ -26,12 +26,22 @@ class OutlineEditor(ctk.CTkScrollableFrame):
     # ═══════════════════════════════════════════
 
     def load_from_json(self, json_str):
-        """从 slide-content.json 字符串解析并构建树。"""
+        """从 slide-content.json 字符串解析并构建树（自动修复 LLM 常见错误）。"""
+        import sys, os as _os
+        _os.path.join  # noop
+        sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..', '..', 'scripts'))
+        from validate_outline import repair_and_validate
+        repaired, warnings = repair_and_validate(json_str)
+        if repaired is None:
+            messagebox.showerror("JSON 解析错误", warnings[0] if warnings else "无法解析")
+            return False
         try:
-            data = json.loads(json_str)
+            data = json.loads(repaired)
         except json.JSONDecodeError as e:
             messagebox.showerror("JSON 解析错误", str(e))
             return False
+        if warnings:
+            print(f'[outline_editor] JSON 修复: {warnings}')
         self.sections = self._parse_slides(data.get('slides', []))
         self._rebuild()
         return True
@@ -212,8 +222,8 @@ class OutlineEditor(ctk.CTkScrollableFrame):
 
         type_names = {
             'keep': '📄', 'author': '作者团队', 'background': '课题背景',
-            'result': '', 'summary': '总结', 'discussion1': '讨论',
-            'discussion2': '讨论(双栏)',
+            'result': '', 'summary': '结果总结', 'discussion1': '讨论分析①',
+            'discussion2': '讨论分析②', 'paper_info': '论文信息',
         }
 
         for i, sec in enumerate(self.sections):
