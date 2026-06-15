@@ -56,10 +56,10 @@ class OutlinePage(ctk.CTkFrame):
             self.module_vars[key] = var
             ctk.CTkCheckBox(mod_frame, text=label, variable=var, width=80).pack(side="left", padx=3)
 
-        ctk.CTkLabel(mod_frame, text="  章节数:").pack(side="left", padx=(15, 0))
-        self.section_count_var = ctk.StringVar(value="4")
+        ctk.CTkLabel(mod_frame, text="  结果页数:").pack(side="left", padx=(15, 0))
+        self.result_count_var = ctk.StringVar(value="4")
         ctk.CTkOptionMenu(mod_frame, values=["2", "3", "4", "5", "6"],
-                          variable=self.section_count_var, width=50).pack(side="left", padx=3)
+                          variable=self.result_count_var, width=50).pack(side="left", padx=3)
 
         # ── 论文信息区 ──
         ctk.CTkLabel(self, text="论文信息（读取论文后自动填充）", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(5, 0))
@@ -161,7 +161,7 @@ class OutlinePage(ctk.CTkFrame):
         # ── 模块约束 ──
         selected = [k for k, v in self.module_vars.items() if v.get()]
         unselected = [k for k, v in self.module_vars.items() if not v.get()]
-        n_sections = int(self.section_count_var.get())
+        n_results = int(self.result_count_var.get())
 
         # 章节分配：01=固定(封面后第一个数据模块), 02=第二个, ...
         section_modules = [m for m in selected if m in ('author', 'background', 'result', 'summary', 'discussion')]
@@ -177,7 +177,7 @@ class OutlinePage(ctk.CTkFrame):
             f"\n\n## 模块约束（严格遵守）\n"
             f"选中模块: {', '.join(module_labels.get(m, m) for m in selected)}\n"
             f"未选模块: {', '.join(module_labels.get(m, m) for m in unselected)}\n"
-            f"结果内容页数量: {n_sections}\n"
+            f"结果幻灯片数量: {n_results} 页\n"
             f"章节分配:\n" + "\n".join(section_assign) + "\n"
             f"\n规则:\n"
             f"1. 只生成选中模块对应的 slide，禁止生成未选模块\n"
@@ -245,6 +245,20 @@ class OutlinePage(ctk.CTkFrame):
                         insert_at = j + 1; break
                 slides.insert(insert_at, pi)
 
+        # ── 根据勾选模块动态生成章节分配 ──
+        module_labels = {
+            'author': '作者团队', 'background': '课题背景',
+            'result': '结果分析', 'summary': '结果总结', 'discussion': '讨论分析',
+        }
+        section_modules = [m for m in ('author', 'background', 'result', 'summary', 'discussion')
+                          if self.module_vars.get(m) and self.module_vars[m].get()]
+        section_divider_edits = []
+        for i, m in enumerate(section_modules):
+            section_divider_edits.append({
+                "number": f"0{i+1}",
+                "title": module_labels.get(m, m),
+            })
+
         full_config = {
             "meta": {
                 "template_path": self.shared.get('template_path', ''),
@@ -257,15 +271,21 @@ class OutlinePage(ctk.CTkFrame):
                 "date": "202X年X月"
             },
             "toc_replacements": {},
-            "section_divider_edits": [
-                {"number": "01", "title": "作者团队"},
-                {"number": "02", "title": "课题背景"},
-                {"number": "03", "title": "结果分析"},
-                {"number": "04", "title": "讨论"}
-            ],
+            "section_divider_edits": section_divider_edits,
             "slides": slides
         }
         self.shared['slide_content_json'] = json.dumps(full_config, indent=2, ensure_ascii=False)
+
+        # 保存中间大纲到文件（与输出同目录，方便排查）
+        pdf_path = self.shared.get('pdf_path', '')
+        if pdf_path:
+            outline_path = os.path.join(os.path.dirname(pdf_path), 'slide-content.json')
+            try:
+                with open(outline_path, 'w', encoding='utf-8') as f:
+                    f.write(self.shared['slide_content_json'])
+            except Exception:
+                pass  # 保存失败不影响主流程
+
         self.app.switch_to_tab("构建")
 
     def _get_figs_list(self):
