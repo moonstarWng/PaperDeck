@@ -167,32 +167,49 @@ def edit_toc(slide, toc_map, section_titles=None):
             if i < len(title_shapes):
                 _set_shape_text(title_shapes[i], section_titles[i])
 
-        # 不足时克隆第一对整组元素（编号+标题+装饰矩形），从上到下均匀分布
+        # 不足时克隆整行（编号+标题+分隔线），按已有间距均匀延续
         if n_needed > n_existing and n_existing > 0:
             import copy
-            # 收集第一对的所有相关 shapes（编号+标题+它们之间的装饰线）
-            first_num = num_shapes[0]
-            first_title = title_shapes[0]
-            y0 = first_num.top
-            y1 = first_title.top + first_title.height
-            row_h = (y1 - y0) * 1.3  # 行高（含间距）
+            # 收集分隔线（位于编号下方的横线，x≈2.5, w>5）
+            sep_lines = []
+            for sh in slide.shapes:
+                if 'AUTO_SHAPE' in str(sh.shape_type):
+                    x = sh.left / 914400; w = sh.width / 914400
+                    if x > 2.0 and w > 5 and sh.height / 914400 < 0.1:
+                        sep_lines.append(sh)
+            sep_lines.sort(key=lambda s: s.top)
+            # 找到第一个条目对应的分隔线（紧挨在第一个标题下方）
+            first_title_bottom = title_shapes[0].top + title_shapes[0].height
+            first_sep = None
+            for sl in sep_lines:
+                if sl.top >= first_title_bottom - Inches(0.05):
+                    first_sep = sl
+                    break
 
-            # 紧贴在最后一个已有条目下方逐个添加
-            last_y = max(num_shapes[-1].top, title_shapes[-1].top) + num_shapes[-1].height
-            spacing = last_y - max(num_shapes[0].top, title_shapes[0].top) - num_shapes[0].height
-            if spacing < Inches(0.1):
-                spacing = Inches(int(row_h))
+            # 计算行间距（从两条相邻编号的 Y 差）
+            row_gap = int(Inches(1.10))  # 默认
+            if n_existing >= 2:
+                row_gap = int(num_shapes[1].top - num_shapes[0].top)
+
+            # 每组内的相对偏移
+            title_dy = int(title_shapes[0].top - num_shapes[0].top)
+            sep_dy = int(first_sep.top - num_shapes[0].top) if first_sep else int(Inches(0.55))
+
+            # 从最后一个已有行往下排
             for pi in range(n_existing, n_needed):
+                base_y = num_shapes[-1].top + (pi - n_existing + 1) * row_gap
                 # 克隆编号
                 ns = _clone_shape(slide, num_shapes[-1])
-                ns.top = last_y
+                ns.top = base_y
                 _set_shape_text(ns, f'0{pi+1}')
                 # 克隆标题
                 ts = _clone_shape(slide, title_shapes[-1])
-                ts.top = last_y + (title_shapes[-1].top - num_shapes[-1].top)
+                ts.top = base_y + title_dy
                 _set_shape_text(ts, section_titles[pi])
-                # 更新 last_y
-                last_y = max(ns.top, ts.top) + max(ns.height, ts.height) + spacing
+                # 克隆分隔线
+                if first_sep:
+                    sl = _clone_shape(slide, first_sep)
+                    sl.top = base_y + sep_dy
         return
 
     if not toc_map:
