@@ -420,6 +420,7 @@ def extract_template_llm(input_path, output_path, base_url, api_key, model,
 
     # ── Step 2: 分类（规则优先，保证封面/目录/章节/致谢不丢）──
     log("规则分类...")
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from make_template import classify
     classifications = {}
     for i, slide in enumerate(prs.slides):
