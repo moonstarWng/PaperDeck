@@ -402,15 +402,18 @@ def _save_analysis_cache(cache_path, slides_data, classifications, element_maps,
             'index': i, 'classification': cat,
             'shapes': shapes_out,
         })
-    # 提取设计令牌
-    from template_extractor import extract as extract_design
+    # 提取设计令牌（失败不影响主流程）
+    design = {}
     try:
-        design = extract_design(prs.part.package.part_related_by('.pptx')[0] if False else '')
-    except: pass
-    try:
-        design = _extract_design_inline(prs)
-    except:
-        design = {}
+        import tempfile
+        tmp = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
+        tmp.close()
+        prs.save(tmp.name)
+        from template_extractor import extract as extract_design
+        design = extract_design(tmp.name)
+        os.unlink(tmp.name)
+    except Exception:
+        pass
 
     cache = {
         'source': os.path.basename(cache_path.replace('_analysis.json', '.pptx')),

@@ -209,6 +209,7 @@ class ConfigPage(ctk.CTkFrame):
                 self._update_extract_ui(True, 0.0)
                 self.tmpl_status.configure(text="✓ 已是模板骨架（检测到占位符），无需处理", text_color="green")
                 # 顺便生成缓存
+                from scripts.llm_template_extract import analyze_and_cache
                 threading.Thread(target=lambda: analyze_and_cache(path), daemon=True).start()
                 return
         except Exception:
