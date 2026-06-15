@@ -329,11 +329,13 @@ def white_bg(slide):
 
 
 def blank_layout(prs):
-    """查找空白布局。"""
+    """查找空白布局。无空白布局时用占位符最少的布局，并清除残留占位符。"""
     for ly in prs.slide_layouts:
-        if '空白' in ly.name:
+        if '空白' in ly.name or 'blank' in ly.name.lower():
             return ly
-    return prs.slide_layouts[0]
+    # fallback: 选占位符最少的布局（避免 Title Slide 带入空框）
+    best = min(prs.slide_layouts, key=lambda ly: len(ly.placeholders))
+    return best
 
 
 def make_result_slide(prs, title, body_lines, img_specs, figs_dir='.'):

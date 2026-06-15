@@ -36,30 +36,40 @@ class OutlinePage(ctk.CTkFrame):
         self.status = ctk.CTkLabel(self, text="请先读取论文", text_color="gray")
         self.status.pack(anchor="w", padx=15)
 
-        # ── 模块选择 ──
-        mod_frame = ctk.CTkFrame(self)
-        mod_frame.pack(fill="x", padx=10, pady=(5, 0))
-        ctk.CTkLabel(mod_frame, text="包含模块:", font=ctk.CTkFont(size=13, weight="bold")).pack(
-            side="left", padx=(5, 10))
+        # ── 章节配置（可编辑）──
+        ctk.CTkLabel(self, text="章节配置（可编辑标题和页数）",
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(5, 0))
+        self.section_rows = []  # [(enable_var, title_var, count_var, row_frame)]
+        self.sections_frame = ctk.CTkFrame(self)
+        self.sections_frame.pack(fill="x", padx=10, pady=(0, 5))
 
-        self.module_vars = {}
-        self._module_config = [
-            ('author',     '作者团队', True),
-            ('background', '课题背景', True),
-            ('result',     '结果内容', True),
-            ('summary',    '结果总结', True),
-            ('discussion', '讨论分析', True),
-            ('paper_info', '论文信息', False),
+        # 表头
+        hdr = ctk.CTkFrame(self.sections_frame)
+        hdr.pack(fill="x", padx=5, pady=2)
+        ctk.CTkLabel(hdr, text="启用", width=40).pack(side="left", padx=2)
+        ctk.CTkLabel(hdr, text="章节标题", width=140).pack(side="left", padx=2)
+        ctk.CTkLabel(hdr, text="页数", width=40).pack(side="left", padx=2)
+
+        self._default_sections = [
+            ('作者团队', '1'),
+            ('课题背景', '1'),
+            ('结果分析', '4'),
+            ('结果总结', '1'),
+            ('讨论分析', '2'),
         ]
-        for key, label, default in self._module_config:
-            var = ctk.BooleanVar(value=default)
-            self.module_vars[key] = var
-            ctk.CTkCheckBox(mod_frame, text=label, variable=var, width=80).pack(side="left", padx=3)
+        for title, pages in self._default_sections:
+            self._add_section_row(title, pages, True)
 
-        ctk.CTkLabel(mod_frame, text="  结果页数:").pack(side="left", padx=(15, 0))
-        self.result_count_var = ctk.StringVar(value="4")
-        ctk.CTkOptionMenu(mod_frame, values=["2", "3", "4", "5", "6"],
-                          variable=self.result_count_var, width=50).pack(side="left", padx=3)
+        # 添加/删除按钮
+        btn_row = ctk.CTkFrame(self.sections_frame)
+        btn_row.pack(fill="x", padx=5, pady=2)
+        ctk.CTkButton(btn_row, text="+ 添加章节", width=80, height=24,
+                       command=lambda: self._add_section_row('新章节', '1', True)).pack(side="left", padx=5)
+
+        # 论文信息页（独立开关）
+        self.paper_info_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(self.sections_frame, text="☐ 附加论文信息页（PDF首页 + 原文链接）",
+                         variable=self.paper_info_var).pack(anchor="w", padx=5, pady=(5, 0))
 
         # ── 论文信息区 ──
         ctk.CTkLabel(self, text="论文信息（读取论文后自动填充）", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(5, 0))
@@ -82,6 +92,48 @@ class OutlinePage(ctk.CTkFrame):
         ctk.CTkLabel(self, text="大纲（可展开编辑）", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(10, 0))
         self.editor = OutlineEditor(self, height=400)
         self.editor.pack(fill="both", expand=True, padx=10, pady=5)
+
+    def _add_section_row(self, title, pages, enabled):
+        """添加一行章节配置。"""
+        row = ctk.CTkFrame(self.sections_frame)
+        # 插入到添加按钮之前（倒数第二个子元素）
+        children = self.sections_frame.winfo_children()
+        if len(children) >= 2:
+            btn_row = children[-2]  # 按钮行是倒数第二个（最后是 paper_info checkbox）
+            row.pack(fill="x", padx=5, pady=1, before=btn_row)
+        else:
+            row.pack(fill="x", padx=5, pady=1)
+
+        enable_var = ctk.BooleanVar(value=enabled)
+        ctk.CTkCheckBox(row, text="", variable=enable_var, width=30).pack(side="left", padx=2)
+
+        title_var = ctk.StringVar(value=title)
+        ctk.CTkEntry(row, textvariable=title_var, width=140).pack(side="left", padx=2)
+
+        count_var = ctk.StringVar(value=pages)
+        ctk.CTkOptionMenu(row, values=["1", "2", "3", "4", "5", "6"],
+                          variable=count_var, width=45).pack(side="left", padx=2)
+
+        ctk.CTkButton(row, text="×", width=25, height=24, fg_color="#D94F4F",
+                       command=lambda: self._remove_section_row(row)).pack(side="right", padx=2)
+
+        self.section_rows.append((enable_var, title_var, count_var, row))
+
+    def _remove_section_row(self, row):
+        """删除一行章节配置。"""
+        for i, (ev, tv, cv, r) in enumerate(self.section_rows):
+            if r == row:
+                row.destroy()
+                self.section_rows.pop(i)
+                break
+
+    def _get_section_config(self):
+        """获取当前选中的章节配置列表 [(title, page_count), ...]"""
+        config = []
+        for enable_var, title_var, count_var, _ in self.section_rows:
+            if enable_var.get():
+                config.append((title_var.get().strip() or '章节', int(count_var.get() or '1')))
+        return config
 
     # ── 读取论文 ──
     def _read_paper(self):
@@ -158,34 +210,35 @@ class OutlinePage(ctk.CTkFrame):
         if journal: meta_block += f'\n期刊: {journal}'
         if authors: meta_block += f'\n作者: {authors}'
 
-        # ── 模块约束 ──
-        selected = [k for k, v in self.module_vars.items() if v.get()]
-        unselected = [k for k, v in self.module_vars.items() if not v.get()]
-        n_results = int(self.result_count_var.get())
+        # ── 章节约束（从用户配置生成）──
+        sections = self._get_section_config()
+        if not sections:
+            messagebox.showerror("错误", "请至少启用一个章节")
+            return
 
-        # 章节分配：01=固定(封面后第一个数据模块), 02=第二个, ...
-        section_modules = [m for m in selected if m in ('author', 'background', 'result', 'summary', 'discussion')]
-        module_labels = {
-            'author': '作者团队', 'background': '课题背景', 'result': '结果分析',
-            'summary': '结果总结', 'discussion': '讨论分析', 'paper_info': '论文信息页',
-        }
-        section_assign = []
-        for i, m in enumerate(section_modules):
-            section_assign.append(f"    0{i+1} → {module_labels.get(m, m)}")
+        section_assign_lines = []
+        result_page_total = 0
+        for i, (title, pages) in enumerate(sections):
+            section_assign_lines.append(f"    0{i+1} → {title} ({pages} 页)")
+            if pages > 1:
+                result_page_total += pages
 
         constraint = (
-            f"\n\n## 模块约束（严格遵守）\n"
-            f"选中模块: {', '.join(module_labels.get(m, m) for m in selected)}\n"
-            f"未选模块: {', '.join(module_labels.get(m, m) for m in unselected)}\n"
-            f"结果幻灯片数量: {n_results} 页\n"
-            f"章节分配:\n" + "\n".join(section_assign) + "\n"
+            f"\n\n## 章节约束（严格遵守）\n"
+            f"章节数和标题:\n" + "\n".join(section_assign_lines) + "\n"
             f"\n规则:\n"
-            f"1. 只生成选中模块对应的 slide，禁止生成未选模块\n"
-            f"2. 封面、目录、致谢始终包含（不需要勾选）\n"
-            f"3. 每个 result 页必须有恰好 3 行要点，行数不够用图片凑\n"
-            f"4. 封面: presenter='xxx', date='202X年X月'\n"
-            f"5. 章节分隔页使用上述分配的编号和标题"
+            f"1. 章节分隔页使用上述编号和标题，禁止增减章节\n"
+            f"2. 章节标题为 {', '.join(t for t, _ in sections)}\n"
+            f"3. 每个章节下的内容页数严格等于指定的页数\n"
+            f"4. 封面、目录、致谢始终包含\n"
+            f"5. 每个 result 页恰好 3 行要点\n"
+            f"6. 封面: presenter='xxx', date='202X年X月'\n"
         )
+        has_paper_info = self.paper_info_var.get()
+        if has_paper_info:
+            constraint += "7. 生成 paper_info 页（PDF首页 + 原文链接）\n"
+        else:
+            constraint += "7. 不要生成 paper_info 页\n"
 
         figs = self._get_figs_list()
         prompt = (
@@ -230,10 +283,9 @@ class OutlinePage(ctk.CTkFrame):
 
         slides = tree_data.get("slides", [])
 
-        # 自动注入论文信息页（在第一个 keep section 之后）—— 仅当用户勾选了该模块
+        # 自动注入论文信息页 —— 仅当用户勾选了该选项
         pdf_path = self.shared.get('pdf_path', '')
-        paper_info_checked = self.module_vars.get('paper_info')
-        if pdf_path and os.path.exists(pdf_path) and paper_info_checked and paper_info_checked.get():
+        if pdf_path and os.path.exists(pdf_path) and self.paper_info_var.get():
             has_paper_info = any(s.get('type') == 'paper_info' for s in slides)
             if not has_paper_info:
                 paper_title = self.title_entry.get().strip()
@@ -245,18 +297,13 @@ class OutlinePage(ctk.CTkFrame):
                         insert_at = j + 1; break
                 slides.insert(insert_at, pi)
 
-        # ── 根据勾选模块动态生成章节分配 ──
-        module_labels = {
-            'author': '作者团队', 'background': '课题背景',
-            'result': '结果分析', 'summary': '结果总结', 'discussion': '讨论分析',
-        }
-        section_modules = [m for m in ('author', 'background', 'result', 'summary', 'discussion')
-                          if self.module_vars.get(m) and self.module_vars[m].get()]
+        # ── 根据用户配置的章节动态生成 ──
+        sections = self._get_section_config()
         section_divider_edits = []
-        for i, m in enumerate(section_modules):
+        for i, (title, _) in enumerate(sections):
             section_divider_edits.append({
                 "number": f"0{i+1}",
-                "title": module_labels.get(m, m),
+                "title": title,
             })
 
         full_config = {
