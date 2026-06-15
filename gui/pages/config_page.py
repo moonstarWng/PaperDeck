@@ -47,7 +47,7 @@ class ConfigPage(ctk.CTkFrame):
         mode_frame = ctk.CTkFrame(self)
         mode_frame.pack(fill="x", padx=10, pady=(5, 0))
         ctk.CTkLabel(mode_frame, text="提取模式:", width=70).pack(side="left", padx=(5, 0))
-        self.extract_mode = ctk.StringVar(value="rule")
+        self.extract_mode = ctk.StringVar(value="llm")
         self.mode_rule_btn = ctk.CTkRadioButton(
             mode_frame, text="规则 (快速)", variable=self.extract_mode, value="rule",
             command=self._on_mode_change)
