@@ -438,6 +438,10 @@ def extract_template_llm(input_path, output_path, base_url, api_key, model,
     content_slides = [i for i, t in classifications.items() if t == 'CONTENT']
     log(f"内容页: {len(content_slides)} 页，逐页 LLM 识别元素...")
 
+    headers = {'Content-Type': 'application/json'}
+    if api_key:
+        headers['Authorization'] = f'Bearer {api_key}'
+
     all_element_maps = {}
     for idx in content_slides:
         prompt = build_element_prompt(slides_data[idx])
