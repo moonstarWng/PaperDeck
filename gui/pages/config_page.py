@@ -115,6 +115,9 @@ class ConfigPage(ctk.CTkFrame):
         if not path:
             self.tmpl_status.configure(text="请先选择模板文件", text_color="red")
             return
+        if not os.path.exists(path):
+            self.tmpl_status.configure(text="模板文件不存在", text_color="red")
+            return
         self.shared['template_path'] = path
 
         if self.extract_mode.get() == "llm":
