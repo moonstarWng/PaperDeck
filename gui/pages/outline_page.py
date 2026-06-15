@@ -36,6 +36,31 @@ class OutlinePage(ctk.CTkFrame):
         self.status = ctk.CTkLabel(self, text="请先读取论文", text_color="gray")
         self.status.pack(anchor="w", padx=15)
 
+        # ── 模块选择 ──
+        mod_frame = ctk.CTkFrame(self)
+        mod_frame.pack(fill="x", padx=10, pady=(5, 0))
+        ctk.CTkLabel(mod_frame, text="包含模块:", font=ctk.CTkFont(size=13, weight="bold")).pack(
+            side="left", padx=(5, 10))
+
+        self.module_vars = {}
+        self._module_config = [
+            ('author',     '作者团队', True),
+            ('background', '课题背景', True),
+            ('result',     '结果内容', True),
+            ('summary',    '结果总结', True),
+            ('discussion', '讨论分析', True),
+            ('paper_info', '论文信息', False),
+        ]
+        for key, label, default in self._module_config:
+            var = ctk.BooleanVar(value=default)
+            self.module_vars[key] = var
+            ctk.CTkCheckBox(mod_frame, text=label, variable=var, width=80).pack(side="left", padx=3)
+
+        ctk.CTkLabel(mod_frame, text="  章节数:").pack(side="left", padx=(15, 0))
+        self.section_count_var = ctk.StringVar(value="4")
+        ctk.CTkOptionMenu(mod_frame, values=["2", "3", "4", "5", "6"],
+                          variable=self.section_count_var, width=50).pack(side="left", padx=3)
+
         # ── 论文信息区 ──
         ctk.CTkLabel(self, text="论文信息（读取论文后自动填充）", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(5, 0))
         info_frame = ctk.CTkFrame(self)
@@ -133,13 +158,42 @@ class OutlinePage(ctk.CTkFrame):
         if journal: meta_block += f'\n期刊: {journal}'
         if authors: meta_block += f'\n作者: {authors}'
 
+        # ── 模块约束 ──
+        selected = [k for k, v in self.module_vars.items() if v.get()]
+        unselected = [k for k, v in self.module_vars.items() if not v.get()]
+        n_sections = int(self.section_count_var.get())
+
+        # 章节分配：01=固定(封面后第一个数据模块), 02=第二个, ...
+        section_modules = [m for m in selected if m in ('author', 'background', 'result', 'summary', 'discussion')]
+        module_labels = {
+            'author': '作者团队', 'background': '课题背景', 'result': '结果分析',
+            'summary': '结果总结', 'discussion': '讨论分析', 'paper_info': '论文信息页',
+        }
+        section_assign = []
+        for i, m in enumerate(section_modules):
+            section_assign.append(f"    0{i+1} → {module_labels.get(m, m)}")
+
+        constraint = (
+            f"\n\n## 模块约束（严格遵守）\n"
+            f"选中模块: {', '.join(module_labels.get(m, m) for m in selected)}\n"
+            f"未选模块: {', '.join(module_labels.get(m, m) for m in unselected)}\n"
+            f"结果内容页数量: {n_sections}\n"
+            f"章节分配:\n" + "\n".join(section_assign) + "\n"
+            f"\n规则:\n"
+            f"1. 只生成选中模块对应的 slide，禁止生成未选模块\n"
+            f"2. 封面、目录、致谢始终包含（不需要勾选）\n"
+            f"3. 每个 result 页必须有恰好 3 行要点，行数不够用图片凑\n"
+            f"4. 封面: presenter='xxx', date='202X年X月'\n"
+            f"5. 章节分隔页使用上述分配的编号和标题"
+        )
+
         figs = self._get_figs_list()
         prompt = (
             f"## 论文元数据{meta_block}\n\n"
             f"## 论文全文\n{paper_text[:40000]}\n\n"
-            f"## 图片文件列表\n{figs}\n\n"
+            f"## 图片文件列表\n{figs}\n"
+            f"{constraint}\n\n"
             f"请根据上述内容生成 slide-content.json。"
-            f"重要：cover.presenter='xxx', cover.date='202X年X月'。"
         )
         threading.Thread(target=self._do_llm_call, args=(prompt,), daemon=True).start()
 
@@ -176,15 +230,15 @@ class OutlinePage(ctk.CTkFrame):
 
         slides = tree_data.get("slides", [])
 
-        # 自动注入论文信息页（在第一个 keep section 之后）
+        # 自动注入论文信息页（在第一个 keep section 之后）—— 仅当用户勾选了该模块
         pdf_path = self.shared.get('pdf_path', '')
-        if pdf_path and os.path.exists(pdf_path):
+        paper_info_checked = self.module_vars.get('paper_info')
+        if pdf_path and os.path.exists(pdf_path) and paper_info_checked and paper_info_checked.get():
             has_paper_info = any(s.get('type') == 'paper_info' for s in slides)
             if not has_paper_info:
                 paper_title = self.title_entry.get().strip()
                 pi = {'type': 'paper_info', 'pdf_path': pdf_path,
                        'paper_title': paper_title, 'extra_text': ''}
-                # 找到 author slide 后的位置插入
                 insert_at = 0
                 for j, s in enumerate(slides):
                     if s.get('type') == 'author':

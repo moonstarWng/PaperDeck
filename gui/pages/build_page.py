@@ -176,12 +176,29 @@ class BuildPage(ctk.CTkFrame):
                 pass
 
     def _open_folder(self):
-        """在资源管理器中打开输出文件夹。"""
+        """打开生成的 PPTX 文件（优先）或其所在文件夹。"""
         path = self.output_path or self.out_var.get().strip()
-        out_dir = os.path.dirname(path) if path else ''
-        if out_dir and os.path.exists(out_dir):
-            os.startfile(out_dir)
-        elif path:
-            messagebox.showinfo("提示", "文件尚未生成")
-        else:
+        if not path:
             messagebox.showinfo("提示", "尚未构建")
+            return
+
+        # 安全检查：确保路径在合理范围内
+        norm = os.path.normpath(os.path.abspath(path))
+        if not norm.lower().endswith('.pptx'):
+            messagebox.showinfo("提示", "输出文件必须是 .pptx 格式")
+            return
+
+        if os.path.isfile(norm):
+            # 文件已生成 → 直接打开
+            try:
+                os.startfile(norm)
+                self._log(f"[打开] {norm}")
+            except OSError as e:
+                messagebox.showerror("错误", f"无法打开文件:\n{e}")
+        else:
+            # 文件尚未生成 → 打开所在文件夹
+            out_dir = os.path.dirname(norm)
+            if os.path.isdir(out_dir):
+                os.startfile(out_dir)
+            else:
+                messagebox.showinfo("提示", "输出目录不存在，请先构建")
