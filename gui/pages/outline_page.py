@@ -337,10 +337,12 @@ class OutlinePage(ctk.CTkFrame):
     def _load_llm_result(self, result):
         """在主线程加载 LLM 结果到编辑器。"""
         self.editor.set_figs_dir(self.shared.get('figs_dir', ''))
-        # 保存原始输出以备排查
+        # 保存原始输出到 process 目录
         pdf_path = self.shared.get('pdf_path', '')
         if pdf_path:
-            raw_path = os.path.join(os.path.dirname(pdf_path), 'slide-content-raw.json')
+            proc_dir = os.path.join(os.path.dirname(os.path.abspath(pdf_path)), 'process')
+            os.makedirs(proc_dir, exist_ok=True)
+            raw_path = os.path.join(proc_dir, 'slide-content-raw.json')
             try:
                 with open(raw_path, 'w', encoding='utf-8') as f:
                     f.write(result)
@@ -426,15 +428,17 @@ class OutlinePage(ctk.CTkFrame):
         }
         self.shared['slide_content_json'] = json.dumps(full_config, indent=2, ensure_ascii=False)
 
-        # 保存中间大纲到文件（与输出同目录，方便排查）
+        # 保存中间大纲到 process 目录
         pdf_path = self.shared.get('pdf_path', '')
         if pdf_path:
-            outline_path = os.path.join(os.path.dirname(pdf_path), 'slide-content.json')
+            proc_dir = os.path.join(os.path.dirname(os.path.abspath(pdf_path)), 'process')
+            os.makedirs(proc_dir, exist_ok=True)
+            outline_path = os.path.join(proc_dir, 'slide-content.json')
             try:
                 with open(outline_path, 'w', encoding='utf-8') as f:
                     f.write(self.shared['slide_content_json'])
             except Exception:
-                pass  # 保存失败不影响主流程
+                pass
 
         self.app.switch_to_tab("构建")
 

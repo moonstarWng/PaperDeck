@@ -377,6 +377,131 @@ def apply_placeholders(prs, slide_index, element_map):
 
 
 # ═══════════════════════════════════════════
+# 持久化分析缓存
+# ═══════════════════════════════════════════
+
+def _save_analysis_cache(cache_path, slides_data, classifications, element_maps, prs):
+    """将模板分析结果持久化为 JSON 缓存文件。"""
+    import hashlib, datetime
+    slides_cache = []
+    for i, sd in enumerate(slides_data):
+        cat = classifications.get(i, 'UNKNOWN')
+        emap = element_maps.get(i, {})
+        shapes_out = []
+        for j, s in enumerate(sd['shapes']):
+            entry = {
+                'name': s['name'], 'type': s['type'],
+                'pos': s['pos'], 'size': s['size'],
+                'role': emap.get(j, 'unknown'),
+            }
+            if 'fill' in s: entry['fill'] = s['fill']
+            if 'text' in s: entry['text'] = s['text'][:100]
+            if 'font' in s: entry['font'] = s['font']
+            shapes_out.append(entry)
+        slides_cache.append({
+            'index': i, 'classification': cat,
+            'shapes': shapes_out,
+        })
+    # 提取设计令牌
+    from template_extractor import extract as extract_design
+    try:
+        design = extract_design(prs.part.package.part_related_by('.pptx')[0] if False else '')
+    except: pass
+    try:
+        design = _extract_design_inline(prs)
+    except:
+        design = {}
+
+    cache = {
+        'source': os.path.basename(cache_path.replace('_analysis.json', '.pptx')),
+        'analyzed_at': datetime.datetime.now().isoformat(),
+        'total_slides': len(slides_cache),
+        'slides': slides_cache,
+        'design_tokens': design,
+    }
+    with open(cache_path, 'w', encoding='utf-8') as f:
+        json.dump(cache, f, indent=2, ensure_ascii=False)
+
+
+def _extract_design_inline(prs):
+    """内联提取设计令牌（不依赖文件路径）。"""
+    from template_extractor import extract as _ext
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
+    tmp.close()
+    try:
+        prs.save(tmp.name)
+        return _ext(tmp.name)
+    finally:
+        try: os.unlink(tmp.name)
+        except: pass
+
+
+def _process_dir(pptx_path):
+    """获取过程文件目录（论文同级 process/）。"""
+    d = os.path.join(os.path.dirname(os.path.abspath(pptx_path)), 'process')
+    os.makedirs(d, exist_ok=True)
+    return d
+
+def load_template_cache(pptx_path):
+    """加载模板分析缓存。返回 None 表示缓存不存在或已过期。"""
+    cache_path = os.path.join(_process_dir(pptx_path), 'analysis.json')
+    if not os.path.exists(cache_path):
+        return None
+    pptx_mtime = os.path.getmtime(pptx_path)
+    cache_mtime = os.path.getmtime(cache_path)
+    if cache_mtime < pptx_mtime:
+        return None  # PPTX 已更新，缓存过期
+    try:
+        with open(cache_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def analyze_and_cache(pptx_path):
+    """分析 PPTX 并持久化缓存（规则分类，无需 LLM）。返回缓存 dict。"""
+    prs = Presentation(pptx_path)
+    slides_data = dump_all_slides(prs)
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from make_template import classify
+
+    classifications = {}
+    for i, slide in enumerate(prs.slides):
+        cat = classify(slide)
+        if cat.startswith('SECTION_'): classifications[i] = 'SECTION'
+        elif cat in ('COVER', 'TOC', 'THANKS'): classifications[i] = cat
+        else: classifications[i] = 'CONTENT'
+
+    # 内容页：按规则分配角色（标题/正文/图片/装饰）
+    element_maps = {}
+    for i in classifications:
+        if classifications[i] != 'CONTENT':
+            continue
+        slide = prs.slides[i]
+        emap = {}
+        for j, shape in enumerate(slide.shapes):
+            role = 'decoration'
+            if shape.has_text_frame and shape.text_frame.text.strip():
+                y = shape.top / 914400
+                font = _safe_font_info(shape)
+                size = font.get('size_pt', 0) if font else 0
+                if y < 1.5 and size > 16:
+                    role = 'title'
+                elif y < 7.0:
+                    role = 'body'
+            elif 'PICTURE' in str(shape.shape_type):
+                role = 'image'
+            emap[j] = role
+        element_maps[i] = emap
+
+    cache_path = os.path.join(_process_dir(pptx_path), 'analysis.json')
+    _save_analysis_cache(cache_path, slides_data, classifications, element_maps, prs)
+    return load_template_cache(pptx_path)
+
+
+# ═══════════════════════════════════════════
 # 主入口
 # ═══════════════════════════════════════════
 
@@ -507,6 +632,10 @@ def extract_template_llm(input_path, output_path, base_url, api_key, model,
     log("通用化模板文字...")
     from make_template import generalize_text
     generalize_text(prs)
+
+    # ── 持久化分析缓存 ──
+    cache_path = os.path.join(_process_dir(input_path), 'analysis.json')
+    _save_analysis_cache(cache_path, slides_data, classifications, all_element_maps, prs)
 
     # ── 保存 ──
     log(f"保存 → {output_path}")

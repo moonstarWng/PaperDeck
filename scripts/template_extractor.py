@@ -74,11 +74,15 @@ def _get_run_info(shape):
     for para in shape.text_frame.paragraphs:
         for run in para.runs:
             f = run.font
+            try:
+                c = _color_to_hex(f.color.rgb) if f.color else None
+            except Exception:
+                c = None
             return {
                 'font_name': f.name,
                 'font_size_pt': _emu_to_pt(f.size),
                 'bold': f.bold,
-                'color': _color_to_hex(f.color.rgb) if f.color and f.color.rgb else None,
+                'color': c,
             }
     return {}
 
@@ -98,8 +102,8 @@ def extract(template_path):
     """从模板 PPTX 提取设计令牌。"""
     prs = Presentation(template_path)
     total = len(prs.slides)
-    if total < 5:
-        raise ValueError(f"模板只有 {total} 页，至少需要 5 页 (cover/toc/sections/content/thanks)")
+    if total < 4:
+        raise ValueError(f"模板只有 {total} 页，至少需要 4 页 (cover/toc/section/thanks)")
 
     # 识别页面类型
     from make_template import classify
@@ -139,28 +143,37 @@ def extract(template_path):
         if has_body_text:
             content_idx = i
             break
-    if content_idx is None:
-        content_idx = total - 2
-
     cover_idx = indices.get('COVER', 0)
     section_indices = [i for i, t in slide_types.items() if t.startswith('SECTION_')]
     section_idx = section_indices[0] if section_indices else 2
+
+    if content_idx is None:
+        # 4 页模板没有内容页，从章节页提取风格信息
+        content_idx = section_idx
     toc_idx = indices.get('TOC', 1)
     thanks_idx = indices.get('THANKS', total - 1)
 
     # ═══ 提取 ═══
     design = {'meta': {'source': os.path.basename(template_path), 'total_slides': total}}
 
-    # ── 内容页 ──
+    # ── 内容页（无内容页时从章节页提取页眉页脚）──
     cs = prs.slides[content_idx]
     title_shapes = _find_shapes(cs, area='header', has_text=True)
     body_shapes = _find_shapes(cs, area='body', has_text=True)
     footer_shapes = _find_shapes(cs, area='footer')
     header_decos = _find_shapes(cs, area='header', has_text=False)
 
-    # 标题字体（header 区域第一个有文本的形状）
+    # 如果内容页没有任何 body/footer 信息，从整个页面提取颜色
+    if not footer_shapes:
+        footer_shapes = _find_shapes(cs, area='footer')
+    if not footer_shapes:
+        # 从整个页面找底部的矩形条（可能是页脚装饰）
+        for sh in cs.shapes:
+            y = sh.top / 914400
+            if y > 6.5 and sh.width / 914400 > 10:
+                footer_shapes.append(sh)
+
     design['content_title'] = _get_run_info(title_shapes[0]) if title_shapes else {}
-    # 正文字体（body 区域最大的文本框）
     if body_shapes:
         largest = max(body_shapes, key=lambda s: s.height)
         design['content_body'] = _get_run_info(largest)
@@ -175,7 +188,7 @@ def extract(template_path):
             footer_colors.append({'color': c, 'y_in': round(sh.top / 914400, 2), 'h_in': round(sh.height / 914400, 3)})
     design['footer_bars'] = footer_colors
 
-    # 标题装饰（header 区域非文本形状）
+    # 标题装饰
     for sh in header_decos:
         c = _get_shape_style(sh)
         if c:

@@ -171,8 +171,24 @@ class ConfigPage(ctk.CTkFrame):
             self.extract_progress.configure(text="")
 
     def _detect_template_llm(self, path):
-        """LLM 模式：先用规则预检（含占位符识别），已是模板则跳过 LLM。"""
-        # 规则预检：占位符检测可以瞬间完成，避免 LLM 浪费
+        """LLM 模式：先查缓存，再规则预检，都未命中才调 LLM。"""
+        # 1. 查持久化缓存
+        try:
+            from scripts.llm_template_extract import load_template_cache
+            cache = load_template_cache(path)
+            if cache:
+                cats = {s['index']: s['classification'] for s in cache['slides']}
+                c_count = sum(1 for v in cats.values() if v == 'CONTENT')
+                ratio = c_count / max(len(cats), 1)
+                is_tpl = ratio < 0.2
+                self.shared['is_template'] = is_tpl
+                self._update_extract_ui(is_tpl, ratio)
+                self.tmpl_status.configure(text=f"✓ 从缓存识别 (内容页{ratio:.0%})", text_color="green")
+                return
+        except Exception:
+            pass
+
+        # 2. 规则预检：占位符检测
         try:
             from pptx import Presentation
             prs = Presentation(path)
@@ -189,9 +205,11 @@ class ConfigPage(ctk.CTkFrame):
                 self.shared['is_template'] = True
                 self._update_extract_ui(True, 0.0)
                 self.tmpl_status.configure(text="✓ 已是模板骨架（检测到占位符），无需处理", text_color="green")
+                # 顺便生成缓存
+                threading.Thread(target=lambda: analyze_and_cache(path), daemon=True).start()
                 return
         except Exception:
-            pass  # 规则预检失败则走 LLM
+            pass
 
         url = self.url_entry.get().strip()
         key = self.key_entry.get().strip()
@@ -354,9 +372,11 @@ class ConfigPage(ctk.CTkFrame):
     def _do_extract_rule(self):
         try:
             self.extract_progress.configure(text="提取中...")
-            import sys
+            import sys, os as _os
             src = self.shared['template_path']
-            dst = src.replace('.pptx', '_模板.pptx')
+            proc_dir = _os.path.join(_os.path.dirname(_os.path.abspath(src)), 'process')
+            _os.makedirs(proc_dir, exist_ok=True)
+            dst = _os.path.join(proc_dir, 'template.pptx')
             sys.argv = ['make_template.py', src, dst]
             from scripts.make_template import main as make_tmpl_main
             make_tmpl_main()
@@ -377,8 +397,11 @@ class ConfigPage(ctk.CTkFrame):
             self.extract_progress.configure(text=msg, text_color="gray")
 
         try:
+            import os as _os
             src = self.shared['template_path']
-            dst = src.replace('.pptx', '_llm_template.pptx')
+            proc_dir = _os.path.join(_os.path.dirname(_os.path.abspath(src)), 'process')
+            _os.makedirs(proc_dir, exist_ok=True)
+            dst = _os.path.join(proc_dir, 'template.pptx')
             url = self.url_entry.get().strip()
             key = self.key_entry.get().strip()
             model = self.model_entry.get().strip()
