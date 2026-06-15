@@ -235,10 +235,11 @@ def trim_slides(prs):
         if cat in CONTENT_TYPES:
             continue
 
-        # 章节页全部保留，其余类型仅保留首个
-        if cat.startswith('SECTION_'):
+        # 章节页只保留第一个（构建时按需自动克隆）
+        if cat.startswith('SECTION_') and 'SECTION_' not in seen:
+            seen['SECTION_'] = i
             to_keep.add(i)
-        elif cat not in seen:
+        elif not cat.startswith('SECTION_') and cat not in seen:
             seen[cat] = i
             to_keep.add(i)
 

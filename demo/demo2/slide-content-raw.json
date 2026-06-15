@@ -1,0 +1,272 @@
+{
+  "meta": {
+    "template_path": "./template",
+    "output_path": "./output/transformer_ppt.pptx",
+    "figs_dir": "./figs",
+    "template_slide_indices": {
+      "cover": 0,
+      "toc": 1,
+      "sections": [2, 3, 4, 5, 6],
+      "thanks": 7,
+      "content_ref": 8
+    }
+  },
+  "cover": {
+    "title_en": "Attention Is All You Need",
+    "presenter": "xxx",
+    "date": "2026年6月12日",
+    "journal_info": "NIPS 2017",
+    "institution": "Google Brain / Google Research"
+  },
+  "toc_replacements": {
+    "目录": "目录",
+    "01": "01",
+    "02": "02",
+    "03": "03",
+    "04": "04",
+    "05": "05",
+    "作者团队": "作者团队",
+    "课题背景": "课题背景",
+    "结果分析": "结果分析",
+    "结果总结": "结果总结",
+    "讨论分析": "讨论分析"
+  },
+  "section_divider_edits": [
+    {
+      "number": "01",
+      "title": "作者团队"
+    },
+    {
+      "number": "02",
+      "title": "课题背景"
+    },
+    {
+      "number": "03",
+      "title": "结果分析"
+    },
+    {
+      "number": "04",
+      "title": "结果总结"
+    },
+    {
+      "number": "05",
+      "title": "讨论分析"
+    }
+  ],
+  "slides": [
+    {
+      "type": "keep",
+      "ref": "cover"
+    },
+    {
+      "type": "keep",
+      "ref": "toc"
+    },
+    {
+      "type": "keep",
+      "ref": "section",
+      "index": 0
+    },
+    {
+      "type": "author",
+      "journal": {
+        "name": "31st Conference on Neural Information Processing Systems (NIPS 2017)",
+        "date": "2017"
+      },
+      "institutions": [
+        "Google Brain",
+        "Google Research",
+        "University of Toronto"
+      ],
+      "authors": "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Łukasz Kaiser, Illia Polosukhin",
+      "prior_work": [
+        "首次提出完全基于注意力机制的序列转换模型 Transformer",
+        "摒弃了循环神经网络和卷积神经网络",
+        "在机器翻译任务上取得最先进成果"
+      ]
+    },
+    {
+      "type": "keep",
+      "ref": "section",
+      "index": 1
+    },
+    {
+      "type": "background",
+      "cards": [
+        {
+          "title": "现有模型的局限",
+          "body": "循环神经网络（RNN）和长短期记忆网络（LSTM）是序列建模的主流方法，但其顺序计算特性限制了并行化，导致训练速度慢",
+          "color": "#E0F0F5"
+        },
+        {
+          "title": "注意力机制的潜力",
+          "body": "注意力机制已被广泛用于增强序列模型，但通常仅作为循环网络的辅助组件，未能完全替代循环结构",
+          "color": "#E8F5E9"
+        },
+        {
+          "title": "研究空白",
+          "body": "尚无模型完全依赖注意力机制进行序列转换，且无需循环或卷积结构",
+          "color": "#FDEDEC"
+        }
+      ],
+      "hypothesis": "完全基于注意力机制的架构（Transformer）能够在提升并行化能力的同时，达到或超越现有序列转换模型的性能",
+      "experiment": "在WMT 2014英德和英法翻译任务上评估模型性能，并与多种基线模型对比"
+    },
+    {
+      "type": "keep",
+      "ref": "section",
+      "index": 2
+    },
+    {
+      "type": "result",
+      "title": "Transformer模型架构",
+      "body": [
+        "编码器和解码器均由6层堆叠组成",
+        "每层包含多头自注意力和前馈网络",
+        "使用残差连接和层归一化稳定训练"
+      ],
+      "images": [
+        {
+          "file": "1A.jpg",
+          "top_in": 1.05
+        }
+      ]
+    },
+    {
+      "type": "result",
+      "title": "缩放点积注意力与多头注意力",
+      "body": [
+        "注意力计算采用缩放点积方式防止梯度消失",
+        "多头机制允许模型关注不同子空间信息",
+        "8个注意力头并行运行提升表达能力"
+      ],
+      "images": [
+        {
+          "file": "2A.jpg",
+          "top_in": 1.05
+        }
+      ]
+    },
+    {
+      "type": "result",
+      "title": "不同层类型的性能对比",
+      "body": [
+        "自注意力层连接所有位置只需常数步操作",
+        "循环层需要线性步数，并行化受限",
+        "卷积层路径长度随序列增长而增加"
+      ],
+      "images": [
+        {
+          "file": "2BC.jpg",
+          "top_in": 1.05
+        }
+      ]
+    },
+    {
+      "type": "result",
+      "title": "机器翻译任务表现",
+      "body": [
+        "英德翻译BLEU达28.4，超越所有先前模型",
+        "英法翻译BLEU达41.8，训练成本仅1/4",
+        "训练时间仅需3.5天（8块P100 GPU）"
+      ],
+      "images": [
+        {
+          "file": "2DE.jpg",
+          "top_in": 1.05
+        }
+      ]
+    },
+    {
+      "type": "keep",
+      "ref": "section",
+      "index": 3
+    },
+    {
+      "type": "summary",
+      "title": "结果总结",
+      "flow_steps": [
+        {
+          "text": "提出Transformer架构",
+          "color": "#007191"
+        },
+        {
+          "text": "完全基于注意力机制",
+          "color": "#1A2E4A"
+        },
+        {
+          "text": "实现高度并行化训练",
+          "color": "#2E7D32"
+        },
+        {
+          "text": "取得翻译任务最优结果",
+          "color": "#D94F4F"
+        }
+      ],
+      "evidence_cards": [
+        {
+          "title": "英德翻译",
+          "detail": "BLEU 28.4，超越所有集成模型"
+        },
+        {
+          "title": "英法翻译",
+          "detail": "BLEU 41.8，单模型最优"
+        },
+        {
+          "title": "训练效率",
+          "detail": "训练成本仅为先前模型的极小部分"
+        }
+      ],
+      "conclusions": [
+        "Transformer是首个完全基于注意力的序列转换模型",
+        "在翻译任务上实现质量与效率的双重提升"
+      ]
+    },
+    {
+      "type": "keep",
+      "ref": "section",
+      "index": 4
+    },
+    {
+      "type": "discussion1",
+      "title": "核心发现与意义",
+      "items": [
+        {
+          "number": "1",
+          "title": "注意力机制可完全替代循环结构",
+          "detail": "实验证明，仅使用自注意力即可高效建模序列依赖关系，且性能优于传统RNN和CNN架构"
+        },
+        {
+          "number": "2",
+          "title": "并行化带来显著训练加速",
+          "detail": "Transformer的训练时间远低于同等性能的循环或卷积模型，为大规模序列任务提供了可行方案"
+        },
+        {
+          "number": "3",
+          "title": "模型具有良好的泛化能力",
+          "detail": "除翻译任务外，Transformer在英语句法分析任务上也取得了优异表现，验证了架构的通用性"
+        }
+      ]
+    },
+    {
+      "type": "discussion2",
+      "title": "局限性与未来方向",
+      "left_title": "局限性",
+      "left_items": [
+        "自注意力计算复杂度为O(n²)，长序列时开销大",
+        "位置编码需人工设计，缺乏绝对位置感知",
+        "在小数据场景下仍需大量正则化防止过拟合"
+      ],
+      "right_title": "临床意义与未来方向",
+      "right_items": [
+        "探索局部受限注意力以处理超长序列",
+        "将Transformer扩展到图像、音频等多模态任务",
+        "研究更高效的生成方式减少顺序依赖"
+      ]
+    },
+    {
+      "type": "keep",
+      "ref": "thanks"
+    }
+  ]
+}

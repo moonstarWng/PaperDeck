@@ -8,6 +8,7 @@ ppt_builder.py — paper2ppt 的 JSON 驱动 PPT 组装器。
 """
 import copy, json, os, sys
 from lxml import etree
+from pptx.enum.text import PP_ALIGN
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
@@ -263,7 +264,45 @@ def build(config, json_path='.'):
 
     slides_plan = config.get('slides', [])
     section_divider_map = config.get('section_divider_edits', [])
-    section_indices = indices.get('sections', [])
+    section_indices = list(indices.get('sections', []))
+
+    # ── 章节页不够时用代码重建（必须在 new_order 构建之前）──
+    def _add_section_slide(prs, base_slide):
+        """重建一个与模板章节页布局一致的空白章节页（带占位文字供 edit 替换）。"""
+        from pptx.dml.color import RGBColor
+        layout = base_slide.slide_layout
+        new_s = prs.slides.add_slide(layout)
+        # 全幅深色背景
+        bg = new_s.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.33), Inches(7.5))
+        bg.fill.solid(); bg.fill.fore_color.rgb = RGBColor(0x1A, 0x1A, 0x1A); bg.line.fill.background()
+        # 左侧竖条
+        bar = new_s.shapes.add_shape(1, Inches(0), Inches(0), Inches(1.2), Inches(7.5))
+        bar.fill.solid(); bar.fill.fore_color.rgb = RGBColor(0xE6, 0x39, 0x46); bar.line.fill.background()
+        # 编号 (TextBox) —— 放占位数字"00"供 edit_section_divider 替换
+        num_box = new_s.shapes.add_textbox(Inches(1.5), Inches(2.5), Inches(1.5), Inches(1.0))
+        p = num_box.text_frame.paragraphs[0]; p.alignment = PP_ALIGN.LEFT
+        r = p.add_run(); r.text = '00'
+        r.font.size = Pt(56); r.font.bold = True; r.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+        # 标题 (TextBox) —— 放占位文字供 edit_section_divider 替换
+        title_box = new_s.shapes.add_textbox(Inches(3.0), Inches(2.5), Inches(7.0), Inches(1.0))
+        tp = title_box.text_frame.paragraphs[0]
+        tr = tp.add_run(); tr.text = 'Section Title'
+        tr.font.size = Pt(44); tr.font.bold = True; tr.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+        # 装饰线
+        deco = new_s.shapes.add_shape(1, Inches(1.5), Inches(3.8), Inches(3.0), Pt(2))
+        deco.fill.solid(); deco.fill.fore_color.rgb = RGBColor(0xE6, 0x39, 0x46); deco.line.fill.background()
+        # 底部横条
+        bot = new_s.shapes.add_shape(1, Inches(0), Inches(7.35), Inches(13.33), Pt(3))
+        bot.fill.solid(); bot.fill.fore_color.rgb = RGBColor(0xE6, 0x39, 0x46); bot.line.fill.background()
+        return new_s
+
+    if section_indices and section_divider_map and len(section_indices) < len(section_divider_map):
+        base_slide = prs.slides[section_indices[0]]
+        n_need = len(section_divider_map) - len(section_indices)
+        print(f"  模板仅 {len(section_indices)} 个章节页，自动创建 {n_need} 个")
+        for _ in range(n_need):
+            new_s = _add_section_slide(prs, base_slide)
+            section_indices.append(len(prs.slides) - 1)
 
     new_order = []          # 最终幻灯片排列顺序（模板原始索引 + 新幻灯片索引）
     section_used = 0        # 跟踪下一次使用哪个章节分隔页
@@ -328,12 +367,10 @@ def build(config, json_path='.'):
     if 'toc_replacements' in config:
         stitles = [sde['title'] for sde in section_divider_map] if section_divider_map else None
         edit_toc(prs.slides[indices.get('toc', 1)], config.get('toc_replacements', {}), stitles)
-    # 编辑章节分隔页：模板不够时只编辑已有的，超出部分警告
+    # 编辑章节分隔页（已在前面克隆补充够数量）
     for i, sde in enumerate(section_divider_map):
         if i < len(section_indices):
             edit_section_divider(prs.slides[section_indices[i]], sde['number'], sde['title'])
-        else:
-            print(f"  WARNING: 章节 '{sde['title']}' 超出模板容量（模板仅 {len(section_indices)} 个章节页），跳过")
     # 致谢页保持模板原文，不做任何修改
 
     # ── 重排序幻灯片 ──
