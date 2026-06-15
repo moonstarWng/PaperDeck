@@ -201,13 +201,19 @@ class OutlinePage(ctk.CTkFrame):
                     if t:
                         text_parts.append(t)
                     if i % 5 == 0:
-                        self.status.configure(text=f"读取中... {i+1}/{total}", text_color="gray")
+                        cur = i + 1
+                        self._safe_ui(lambda c=cur: self.status.configure(
+                            text=f"读取中... {c}/{total}", text_color="gray"))
             full_text = "\n\n".join(text_parts)
             self.shared['paper_text'] = full_text
-            self.status.configure(text=f"✓ 已读取 {total} 页，共 {len(full_text)} 字符。正在提取元数据...", text_color="gray")
+            self._safe_ui(lambda: self.status.configure(
+                text=f"✓ 已读取 {total} 页，共 {len(full_text)} 字符。正在提取元数据...", text_color="gray"))
             self._extract_metadata(full_text)
         except Exception as e:
-            self.status.configure(text=f"读取失败: {e}", text_color="red")
+            import traceback
+            traceback.print_exc()
+            self._safe_ui(lambda: self.status.configure(
+                text=f"读取失败: {e}", text_color="red"))
 
     def _extract_metadata(self, paper_text):
         """使用 LLM 从论文首页提取标题、期刊、作者。"""
@@ -229,13 +235,18 @@ class OutlinePage(ctk.CTkFrame):
             result = call_llm(self.shared['api_base_url'], self.shared['api_key'],
                               self.shared['api_model'], prompt, on_progress=lambda m: None)
             meta = json.loads(result)
-            self.title_entry.delete(0, 'end'); self.title_entry.insert(0, meta.get('title_en', ''))
-            self.journal_entry.delete(0, 'end'); self.journal_entry.insert(0, meta.get('journal', ''))
-            self.author_entry.delete(0, 'end'); self.author_entry.insert(0, meta.get('authors', ''))
-            self.shared['paper_meta'] = meta
-            self.status.configure(text="✓ 元数据已提取，可点击「生成大纲」", text_color="green")
+            def _apply():
+                self.title_entry.delete(0, 'end'); self.title_entry.insert(0, meta.get('title_en', ''))
+                self.journal_entry.delete(0, 'end'); self.journal_entry.insert(0, meta.get('journal', ''))
+                self.author_entry.delete(0, 'end'); self.author_entry.insert(0, meta.get('authors', ''))
+                self.shared['paper_meta'] = meta
+                self.status.configure(text="✓ 元数据已提取，可点击「生成大纲」", text_color="green")
+            self._safe_ui(_apply)
         except Exception as e:
-            self.status.configure(text=f"元数据提取失败: {e}（可手动填写）", text_color="orange")
+            import traceback
+            traceback.print_exc()
+            self._safe_ui(lambda: self.status.configure(
+                text=f"元数据提取失败: {e}（可手动填写）", text_color="orange"))
 
     # ── 生成大纲 ──
     def _generate_outline(self):
@@ -295,21 +306,36 @@ class OutlinePage(ctk.CTkFrame):
         )
         threading.Thread(target=self._do_llm_call, args=(prompt,), daemon=True).start()
 
+    def _safe_ui(self, fn):
+        """在主线程安全调用 UI 更新，忽略已销毁的控件。"""
+        try:
+            self.after(0, fn)
+        except Exception:
+            pass  # widget 已销毁
+
     def _do_llm_call(self, prompt):
         try:
-            result = call_llm(self.shared['api_base_url'], self.shared['api_key'],
-                              self.shared['api_model'], prompt,
-                              on_progress=lambda msg: self.status.configure(text=msg, text_color="gray"))
+            result = call_llm(
+                self.shared['api_base_url'], self.shared['api_key'],
+                self.shared['api_model'], prompt,
+                on_progress=lambda msg: self._safe_ui(
+                    lambda: self.status.configure(text=msg, text_color="gray")))
             self.shared['slide_content_json'] = result
-            # 加载到树形编辑器
-            self.editor.set_figs_dir(self.shared.get('figs_dir', ''))
-            ok = self.editor.load_from_json(result)
-            if ok:
-                self.status.configure(text="✓ 大纲已生成，可展开编辑后点击「构建 PPT」", text_color="green")
-            else:
-                self.status.configure(text="大纲生成完成但解析失败，请检查 JSON 格式", text_color="orange")
+            self._safe_ui(lambda: self._load_llm_result(result))
         except Exception as e:
-            self.status.configure(text=f"生成失败: {e}", text_color="red")
+            import traceback
+            traceback.print_exc()
+            self._safe_ui(lambda: self.status.configure(
+                text=f"生成失败: {e}", text_color="red"))
+
+    def _load_llm_result(self, result):
+        """在主线程加载 LLM 结果到编辑器。"""
+        self.editor.set_figs_dir(self.shared.get('figs_dir', ''))
+        ok = self.editor.load_from_json(result)
+        if ok:
+            self.status.configure(text="✓ 大纲已生成，可展开编辑后点击「构建 PPT」", text_color="green")
+        else:
+            self.status.configure(text="大纲生成完成但解析失败，请检查 JSON 格式", text_color="orange")
 
     # ── 构建 ──
     def _go_build(self):
