@@ -160,84 +160,89 @@ def edit_toc(slide, toc_map, section_titles=None):
         n_existing = min(len(num_shapes), len(title_shapes))
         n_needed = len(section_titles)
 
-        # 替换已有条目
-        for i in range(min(n_existing, n_needed)):
-            if i < len(num_shapes):
-                _set_shape_text(num_shapes[i], f'0{i+1}')
-            if i < len(title_shapes):
-                _set_shape_text(title_shapes[i], section_titles[i])
+        # 收集分隔线
+        import copy
+        sep_lines = []
+        for sh in slide.shapes:
+            if 'AUTO_SHAPE' in str(sh.shape_type):
+                x = sh.left / 914400; w = sh.width / 914400
+                if x > 2.0 and w > 5 and sh.height / 914400 < 0.1:
+                    sep_lines.append(sh)
+        sep_lines.sort(key=lambda s: s.top)
+        first_title_bottom = title_shapes[0].top + title_shapes[0].height
+        first_sep = None
+        for sl in sep_lines:
+            if sl.top >= first_title_bottom - Inches(0.05):
+                first_sep = sl; break
 
-        # 条目不够时克隆，所有行在固定高度内均匀分布
-        if n_needed > n_existing and n_existing > 0:
-            import copy
-            # 收集分隔线
-            sep_lines = []
-            for sh in slide.shapes:
-                if 'AUTO_SHAPE' in str(sh.shape_type):
-                    x = sh.left / 914400; w = sh.width / 914400
-                    if x > 2.0 and w > 5 and sh.height / 914400 < 0.1:
-                        sep_lines.append(sh)
-            sep_lines.sort(key=lambda s: s.top)
-            first_title_bottom = title_shapes[0].top + title_shapes[0].height
-            first_sep = None
-            for sl in sep_lines:
-                if sl.top >= first_title_bottom - Inches(0.05):
-                    first_sep = sl; break
+        title_dy = int(title_shapes[0].top - num_shapes[0].top)
+        sep_dy = int(first_sep.top - num_shapes[0].top) if first_sep else int(Inches(0.55))
+        total_rows = n_needed
 
-            # 组内偏移
-            title_dy = int(title_shapes[0].top - num_shapes[0].top)
-            sep_dy = int(first_sep.top - num_shapes[0].top) if first_sep else int(Inches(0.55))
+        # ── 补充不足的条目 ──
+        for pi in range(n_existing, total_rows):
+            ns = _clone_shape(slide, num_shapes[-1]); num_shapes.append(ns)
+            ts = _clone_shape(slide, title_shapes[-1]); title_shapes.append(ts)
+            if first_sep:
+                _clone_shape(slide, first_sep)
 
-            # 先补克隆不足的条目
-            for pi in range(n_existing, n_needed):
-                ns = _clone_shape(slide, num_shapes[-1]); num_shapes.append(ns)
-                ts = _clone_shape(slide, title_shapes[-1]); title_shapes.append(ts)
-                if first_sep:
-                    _clone_shape(slide, first_sep)  # sep 也会被收集到下面统一排列
+        # ── 重新收集所有行和分隔线 ──
+        all_num = list(num_shapes)
+        all_title = list(title_shapes)
+        sep_lines2 = []
+        for sh in slide.shapes:
+            if 'AUTO_SHAPE' in str(sh.shape_type):
+                x = sh.left / 914400; w = sh.width / 914400
+                if x > 2.0 and w > 5 and sh.height / 914400 < 0.1:
+                    sep_lines2.append(sh)
+        sep_lines2.sort(key=lambda s: s.top)
 
-            # 收集所有编号+标题+分隔线
-            all_num = list(num_shapes)
-            all_title = list(title_shapes)
-            sep_lines2 = []
-            for sh in slide.shapes:
-                if 'AUTO_SHAPE' in str(sh.shape_type):
-                    x = sh.left / 914400; w = sh.width / 914400
-                    if x > 2.0 and w > 5 and sh.height / 914400 < 0.1:
-                        sep_lines2.append(sh)
-            sep_lines2.sort(key=lambda s: s.top)
+        # ── 删除多余的条目（模板有 4 行但只需要 2 行时）──
+        for pi in range(total_rows, len(all_num)):
+            try:
+                all_num[pi]._element.getparent().remove(all_num[pi]._element)
+            except Exception: pass
+        for pi in range(total_rows, len(all_title)):
+            try:
+                all_title[pi]._element.getparent().remove(all_title[pi]._element)
+            except Exception: pass
+        all_num = all_num[:total_rows]
+        all_title = all_title[:total_rows]
 
-            # 保持原有总高度（首行→末行），均匀分布所有行
-            total_rows = n_needed
-            y_top = all_num[0].top                        # 首行 Y（不变）
-            y_last = num_shapes[-1].top                   # 原有末行 Y（保持不变）
+        # ── 分隔线：补到 total_rows，多余的删 ──
+        while len(sep_lines2) < total_rows:
+            if first_sep:
+                sl = _clone_shape(slide, first_sep)
+                sep_lines2.append(sl)
+            else:
+                break
+        for pi in range(total_rows, len(sep_lines2)):
+            try:
+                sep_lines2[pi]._element.getparent().remove(sep_lines2[pi]._element)
+            except Exception: pass
+        sep_lines2 = sep_lines2[:total_rows]
+
+        # ── 固定高度均匀分布（总高度 = 原模板 4 行跨度 3.30in）──
+        y_top = int(num_shapes[0].top)
+        y_span = int(Inches(3.30))  # 固定总高，不随行数变
+        y_last = y_top + y_span
+        if total_rows > 1:
             row_gap = int((y_last - y_top) / max(total_rows - 1, 1))
+        else:
+            row_gap = 0
 
-            # 重新排列所有行（首行不动，中间均分，末行保持原位）
-            for pi in range(total_rows):
-                base_y = y_top + pi * row_gap
-                all_num[pi].top = base_y
-                all_title[pi].top = base_y + title_dy
+        for pi in range(total_rows):
+            base_y = y_top + pi * row_gap
+            all_num[pi].top = base_y
+            all_title[pi].top = base_y + title_dy
+        for pi in range(total_rows):
+            if pi < len(sep_lines2):
+                sep_lines2[pi].top = all_num[pi].top + sep_dy
 
-            # 分隔线：每行下方一条（含末行），先删除多余的再补充不足的
-            while len(sep_lines2) < total_rows:
-                if first_sep:
-                    sl = _clone_shape(slide, first_sep)
-                    sep_lines2.append(sl)
-                else:
-                    break
-            for pi in range(total_rows):
-                if pi < len(sep_lines2):
-                    sep_lines2[pi].top = all_num[pi].top + sep_dy
-            for pi in range(total_rows, len(sep_lines2)):
-                try:
-                    sep_lines2[pi]._element.getparent().remove(sep_lines2[pi]._element)
-                except Exception:
-                    pass
-
-            # 更新文字
-            for pi in range(total_rows):
-                _set_shape_text(all_num[pi], f'0{pi+1}')
-                _set_shape_text(all_title[pi], section_titles[pi])
+        # ── 更新文字 ──
+        for pi in range(total_rows):
+            _set_shape_text(all_num[pi], f'0{pi+1}')
+            _set_shape_text(all_title[pi], section_titles[pi])
         return
 
     if not toc_map:
