@@ -206,23 +206,29 @@ def edit_toc(slide, toc_map, section_titles=None):
                         sep_lines2.append(sh)
             sep_lines2.sort(key=lambda s: s.top)
 
-            # 固定高度均匀分布
+            # 保持原有总高度（首行→末行），均匀分布所有行
             total_rows = n_needed
-            y_top = all_num[0].top
-            y_bottom_max = int(Inches(6.80))  # footer 上方
-            row_gap = int((y_bottom_max - y_top) / max(total_rows - 1, 1))
+            y_top = all_num[0].top                        # 首行 Y（不变）
+            y_last = num_shapes[-1].top                   # 原有末行 Y（保持不变）
+            row_gap = int((y_last - y_top) / max(total_rows - 1, 1))
 
-            # 重新排列所有行
+            # 重新排列所有行（首行不动，中间均分，末行保持原位）
             for pi in range(total_rows):
                 base_y = y_top + pi * row_gap
                 all_num[pi].top = base_y
                 all_title[pi].top = base_y + title_dy
-            # 分隔线：只保留每行下方一条（最后一行不加），多余删除
-            for pi in range(total_rows - 1):
+
+            # 分隔线：每行下方一条（含末行），先删除多余的再补充不足的
+            while len(sep_lines2) < total_rows:
+                if first_sep:
+                    sl = _clone_shape(slide, first_sep)
+                    sep_lines2.append(sl)
+                else:
+                    break
+            for pi in range(total_rows):
                 if pi < len(sep_lines2):
                     sep_lines2[pi].top = all_num[pi].top + sep_dy
-            # 删除多余分隔线
-            for pi in range(total_rows - 1, len(sep_lines2)):
+            for pi in range(total_rows, len(sep_lines2)):
                 try:
                     sep_lines2[pi]._element.getparent().remove(sep_lines2[pi]._element)
                 except Exception:
