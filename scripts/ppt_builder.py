@@ -167,10 +167,10 @@ def edit_toc(slide, toc_map, section_titles=None):
             if i < len(title_shapes):
                 _set_shape_text(title_shapes[i], section_titles[i])
 
-        # 不足时克隆整行（编号+标题+分隔线），按已有间距均匀延续
+        # 条目不够时克隆，所有行在固定高度内均匀分布
         if n_needed > n_existing and n_existing > 0:
             import copy
-            # 收集分隔线（位于编号下方的横线，x≈2.5, w>5）
+            # 收集分隔线
             sep_lines = []
             for sh in slide.shapes:
                 if 'AUTO_SHAPE' in str(sh.shape_type):
@@ -178,38 +178,60 @@ def edit_toc(slide, toc_map, section_titles=None):
                     if x > 2.0 and w > 5 and sh.height / 914400 < 0.1:
                         sep_lines.append(sh)
             sep_lines.sort(key=lambda s: s.top)
-            # 找到第一个条目对应的分隔线（紧挨在第一个标题下方）
             first_title_bottom = title_shapes[0].top + title_shapes[0].height
             first_sep = None
             for sl in sep_lines:
                 if sl.top >= first_title_bottom - Inches(0.05):
-                    first_sep = sl
-                    break
+                    first_sep = sl; break
 
-            # 计算行间距（从两条相邻编号的 Y 差）
-            row_gap = int(Inches(1.10))  # 默认
-            if n_existing >= 2:
-                row_gap = int(num_shapes[1].top - num_shapes[0].top)
-
-            # 每组内的相对偏移
+            # 组内偏移
             title_dy = int(title_shapes[0].top - num_shapes[0].top)
             sep_dy = int(first_sep.top - num_shapes[0].top) if first_sep else int(Inches(0.55))
 
-            # 从最后一个已有行往下排
+            # 先补克隆不足的条目
             for pi in range(n_existing, n_needed):
-                base_y = num_shapes[-1].top + (pi - n_existing + 1) * row_gap
-                # 克隆编号
-                ns = _clone_shape(slide, num_shapes[-1])
-                ns.top = base_y
-                _set_shape_text(ns, f'0{pi+1}')
-                # 克隆标题
-                ts = _clone_shape(slide, title_shapes[-1])
-                ts.top = base_y + title_dy
-                _set_shape_text(ts, section_titles[pi])
-                # 克隆分隔线
+                ns = _clone_shape(slide, num_shapes[-1]); num_shapes.append(ns)
+                ts = _clone_shape(slide, title_shapes[-1]); title_shapes.append(ts)
                 if first_sep:
-                    sl = _clone_shape(slide, first_sep)
-                    sl.top = base_y + sep_dy
+                    _clone_shape(slide, first_sep)  # sep 也会被收集到下面统一排列
+
+            # 收集所有编号+标题+分隔线
+            all_num = list(num_shapes)
+            all_title = list(title_shapes)
+            sep_lines2 = []
+            for sh in slide.shapes:
+                if 'AUTO_SHAPE' in str(sh.shape_type):
+                    x = sh.left / 914400; w = sh.width / 914400
+                    if x > 2.0 and w > 5 and sh.height / 914400 < 0.1:
+                        sep_lines2.append(sh)
+            sep_lines2.sort(key=lambda s: s.top)
+
+            # 固定高度均匀分布
+            total_rows = n_needed
+            y_top = all_num[0].top
+            y_bottom_max = int(Inches(6.80))  # footer 上方
+            row_gap = int((y_bottom_max - y_top) / max(total_rows - 1, 1))
+
+            # 重新排列所有行
+            for pi in range(total_rows):
+                base_y = y_top + pi * row_gap
+                all_num[pi].top = base_y
+                all_title[pi].top = base_y + title_dy
+            # 分隔线：只保留每行下方一条（最后一行不加），多余删除
+            for pi in range(total_rows - 1):
+                if pi < len(sep_lines2):
+                    sep_lines2[pi].top = all_num[pi].top + sep_dy
+            # 删除多余分隔线
+            for pi in range(total_rows - 1, len(sep_lines2)):
+                try:
+                    sep_lines2[pi]._element.getparent().remove(sep_lines2[pi]._element)
+                except Exception:
+                    pass
+
+            # 更新文字
+            for pi in range(total_rows):
+                _set_shape_text(all_num[pi], f'0{pi+1}')
+                _set_shape_text(all_title[pi], section_titles[pi])
         return
 
     if not toc_map:
