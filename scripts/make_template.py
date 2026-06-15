@@ -169,7 +169,7 @@ def classify(slide):
 
     # 只要是有大背景矩形或 FREEFORM，都视为"有装饰背景"
     has_background = has_freeform or has_dark_bg
-    chapter_match = re.search(r'\b(0[1-9])\b', all_text)
+    chapter_match = re.search(r'\b(\d{1,2})\b', all_text)
 
     # ── 按优先级分类（THANKS 和 TOC 优先于 SECTION/COVER）──
     if re.search(r'\d+\s*小结\d*', all_text):

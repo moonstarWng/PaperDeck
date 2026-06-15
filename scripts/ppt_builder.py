@@ -213,17 +213,19 @@ def build(config, json_path='.'):
 
     # 自动检测模板幻灯片索引（如果 JSON 中未指定或指定了不完整的）
     from make_template import classify
-    auto_indices = {'cover': 0, 'toc': 1, 'sections': [], 'thanks': len(prs.slides) - 1}
+    auto_indices = {'cover': None, 'toc': 1, 'sections': [], 'thanks': len(prs.slides) - 1}
     for i, slide in enumerate(prs.slides):
         cat = classify(slide)
-        if cat == 'COVER':
-            auto_indices['cover'] = i
+        if cat == 'COVER' and auto_indices['cover'] is None:
+            auto_indices['cover'] = i   # 取第一个 COVER
         elif cat == 'TOC':
             auto_indices['toc'] = i
         elif cat.startswith('SECTION_'):
             auto_indices['sections'].append(i)
         elif cat == 'THANKS':
             auto_indices['thanks'] = i
+    if auto_indices['cover'] is None:
+        auto_indices['cover'] = 0  # fallback
     auto_indices['sections'].sort()
     # JSON 中的值覆盖自动检测值（允许用户手动指定）
     for key in ['cover', 'toc', 'thanks']:
