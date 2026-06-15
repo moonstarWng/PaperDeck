@@ -423,6 +423,17 @@ class ConfigPage(ctk.CTkFrame):
             from scripts.llm_template_extract import extract_template_llm
             result = extract_template_llm(src, dst, url, key, model, on_progress=progress)
 
+            # 同步生成 design.json
+            try:
+                from scripts.template_extractor import extract as extract_design
+                design = extract_design(dst)
+                import json as _json
+                design_path = dst.replace('.pptx', '_design.json')
+                with open(design_path, 'w', encoding='utf-8') as f:
+                    _json.dump(design, f, indent=2, ensure_ascii=False)
+            except Exception:
+                pass
+
             self.shared['template_path'] = dst
             self.shared['is_template'] = True
             self.shared['llm_classifications'] = result['classifications']
