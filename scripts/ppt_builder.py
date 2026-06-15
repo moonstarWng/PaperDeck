@@ -322,8 +322,14 @@ def build(config, json_path='.'):
     figs_dir = resolve_path(json_path, meta.get('figs_dir', './figs'))
     indices = meta.get('template_slide_indices', {})
 
-    # 加载模板设计令牌
+    # 加载模板设计令牌（process/ 优先，上级目录兜底）
     design_json = template_path.replace('.pptx', '_design.json')
+    if not os.path.exists(design_json):
+        # 尝试上级目录
+        parent_design = os.path.join(os.path.dirname(os.path.dirname(template_path)),
+                                     os.path.basename(design_json))
+        if os.path.exists(parent_design):
+            design_json = parent_design
     init_design(design_json)
 
     prs = Presentation(template_path)

@@ -163,15 +163,23 @@ def extract(template_path):
     footer_shapes = _find_shapes(cs, area='footer')
     header_decos = _find_shapes(cs, area='header', has_text=False)
 
-    # 如果内容页没有任何 body/footer 信息，从整个页面提取颜色
+    # 如果内容页没有页眉/页脚，扫描所有幻灯片找
     if not footer_shapes:
-        footer_shapes = _find_shapes(cs, area='footer')
-    if not footer_shapes:
-        # 从整个页面找底部的矩形条（可能是页脚装饰）
-        for sh in cs.shapes:
-            y = sh.top / 914400
-            if y > 6.5 and sh.width / 914400 > 10:
-                footer_shapes.append(sh)
+        for slide in prs.slides:
+            for sh in slide.shapes:
+                y = sh.top / 914400
+                if y > 6.5 and sh.width / 914400 > 10 and sh.height / 914400 < 0.2:
+                    c = _get_shape_style(sh)
+                    if c and c not in ('FFFFFF',):
+                        footer_shapes.append(sh)
+            if footer_shapes:
+                break
+    if not header_decos:
+        for slide in prs.slides:
+            decos = _find_shapes(slide, area='header', has_text=False)
+            if decos:
+                header_decos = decos
+                break
 
     design['content_title'] = _get_run_info(title_shapes[0]) if title_shapes else {}
     if body_shapes:

@@ -1,0 +1,83 @@
+{
+  "meta": {
+    "source": "template.pptx",
+    "total_slides": 9
+  },
+  "content_title": {
+    "font_name": "Arial",
+    "font_size_pt": 24,
+    "bold": true,
+    "color": "E63946"
+  },
+  "content_body": {
+    "font_name": "Arial",
+    "font_size_pt": 16,
+    "bold": null,
+    "color": "333333"
+  },
+  "footer_bars": [
+    {
+      "color": "E63946",
+      "y_in": 7.0,
+      "h_in": 0.06
+    }
+  ],
+  "header_decorations": [
+    {
+      "color": "1A1A1A",
+      "x_in": 0.0,
+      "y_in": 0.0,
+      "w_in": 13.33,
+      "h_in": 0.85
+    },
+    {
+      "color": "E63946",
+      "x_in": 0.3,
+      "y_in": 0.22,
+      "w_in": 0.12,
+      "h_in": 0.42
+    },
+    {
+      "color": "E63946",
+      "x_in": 0.5,
+      "y_in": 0.7,
+      "w_in": 12.3,
+      "h_in": 0.03
+    }
+  ],
+  "cover_title": {},
+  "cover_presenter": {},
+  "cover_bg_color": "FFFFFF",
+  "section_number": {
+    "font_name": "Arial",
+    "font_size_pt": 56,
+    "bold": true,
+    "color": "FFFFFF"
+  },
+  "section_title": {
+    "font_name": "Arial",
+    "font_size_pt": 44,
+    "bold": true,
+    "color": "FFFFFF"
+  },
+  "section_bg_color": "1A1A1A",
+  "toc_number": {
+    "font_name": "Arial",
+    "font_size_pt": 20,
+    "bold": true,
+    "color": "E63946"
+  },
+  "toc_item": {
+    "font_name": "Arial",
+    "font_size_pt": 22,
+    "bold": false,
+    "color": "1A1A1A"
+  },
+  "thanks_title": {
+    "font_name": "Arial",
+    "font_size_pt": 72,
+    "bold": true,
+    "color": "FFFFFF"
+  },
+  "default_font": "Arial"
+}
