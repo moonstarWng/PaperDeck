@@ -33,6 +33,22 @@ class ConfigPage(ctk.CTkFrame):
         self.tmpl_status = ctk.CTkLabel(self, text="", text_color="gray")
         self.tmpl_status.pack(anchor="w", padx=20)
 
+        # ── 模板提取模式 ──
+        mode_frame = ctk.CTkFrame(self)
+        mode_frame.pack(fill="x", padx=10, pady=(5, 0))
+        ctk.CTkLabel(mode_frame, text="提取模式:", width=70).pack(side="left", padx=(5, 0))
+        self.extract_mode = ctk.StringVar(value="rule")
+        self.mode_rule_btn = ctk.CTkRadioButton(
+            mode_frame, text="规则 (快速)", variable=self.extract_mode, value="rule",
+            command=self._on_mode_change)
+        self.mode_rule_btn.pack(side="left", padx=5)
+        self.mode_llm_btn = ctk.CTkRadioButton(
+            mode_frame, text="LLM (自适应)", variable=self.extract_mode, value="llm",
+            command=self._on_mode_change)
+        self.mode_llm_btn.pack(side="left", padx=5)
+        self.mode_hint = ctk.CTkLabel(mode_frame, text="", text_color="gray")
+        self.mode_hint.pack(side="left", padx=10)
+
         # ═══ 图片目录 ═══
         ctk.CTkLabel(self, text="论文图片目录 (figs/)", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", pady=(15, 5))
         self.figs_picker = FilePicker(self, "图片:", directory=True)
@@ -69,14 +85,31 @@ class ConfigPage(ctk.CTkFrame):
         self.next_btn = ctk.CTkButton(self, text="下一步: 生成大纲 →", height=36, command=self._go_next)
         self.next_btn.pack(pady=20)
 
+    # ── 模式切换 ──
+    def _on_mode_change(self):
+        mode = self.extract_mode.get()
+        if mode == "llm":
+            self.mode_hint.configure(text="需 API 连接，约 10-30s，自适应不同模板")
+        else:
+            self.mode_hint.configure(text="无需 API，瞬间完成，适合标准模板")
+
     # ── 模板检测 ──
     def _detect_template(self):
-        """检测 PPTX 是否为模板骨架。"""
-        log_step('config', '模板检测开始')
+        """检测 PPTX 是否为模板骨架。LLM 模式下用 LLM 分类。"""
+        log_step('config', f'模板检测开始 ({self.extract_mode.get()} 模式)')
         path = self.tmpl_picker.get_path()
         if not path:
             self.tmpl_status.configure(text="请先选择模板文件", text_color="red")
             return
+        self.shared['template_path'] = path
+
+        if self.extract_mode.get() == "llm":
+            self._detect_template_llm(path)
+        else:
+            self._detect_template_rule(path)
+
+    def _detect_template_rule(self, path):
+        """规则模式：用 classify() 做检测。"""
         try:
             from pptx import Presentation
             prs = Presentation(path)
@@ -91,13 +124,75 @@ class ConfigPage(ctk.CTkFrame):
             ratio = c_count / max(len(prs.slides), 1)
             is_tpl = ratio < 0.2
             self.shared['is_template'] = is_tpl
-            self.shared['template_path'] = path
             if is_tpl:
                 self.tmpl_status.configure(text=f"✓ 已是模板骨架 (内容页{ratio:.0%})，无需处理", text_color="green")
             else:
                 self.tmpl_status.configure(text=f"⚠ 检测到完整PPTX (内容页{ratio:.0%})，将自动提取模板", text_color="orange")
         except Exception as e:
             self.tmpl_status.configure(text=f"检测失败: {e}", text_color="red")
+
+    def _detect_template_llm(self, path):
+        """LLM 模式：用 LLM 做分类检测。"""
+        url = self.url_entry.get().strip()
+        key = self.key_entry.get().strip()
+        model = self.model_entry.get().strip()
+        if not url or not key:
+            self.tmpl_status.configure(text="LLM 模式需要填写 API 配置", text_color="red")
+            return
+        self.tmpl_status.configure(text="LLM 分类中...", text_color="gray")
+        threading.Thread(target=self._do_llm_detect, args=(path, url, key, model), daemon=True).start()
+
+    def _do_llm_detect(self, path, url, key, model):
+        try:
+            from pptx import Presentation
+            from scripts.llm_template_extract import (
+                dump_all_slides, build_classification_prompt,
+                parse_classification_response, CLASSIFICATION_SYSTEM,
+            )
+            import requests
+
+            prs = Presentation(path)
+            slides_data = dump_all_slides(prs)
+            prompt = build_classification_prompt(slides_data)
+
+            headers = {'Content-Type': 'application/json'}
+            if key:
+                headers['Authorization'] = f'Bearer {key}'
+            resp = requests.post(
+                f'{url.rstrip("/")}/chat/completions',
+                headers=headers,
+                json={
+                    'model': model,
+                    'messages': [
+                        {'role': 'system', 'content': CLASSIFICATION_SYSTEM},
+                        {'role': 'user', 'content': prompt},
+                    ],
+                    'temperature': 0.0,
+                },
+                timeout=120,
+            )
+            resp.raise_for_status()
+            content = resp.json()['choices'][0]['message']['content']
+            classifications = parse_classification_response(content)
+
+            t_count = sum(1 for v in classifications.values() if v != 'CONTENT')
+            c_count = sum(1 for v in classifications.values() if v == 'CONTENT')
+            total = len(classifications)
+            ratio = c_count / max(total, 1)
+            is_tpl = ratio < 0.2
+
+            self.shared['is_template'] = is_tpl
+            self.shared['llm_classifications'] = classifications
+            status_text = f"✓ LLM 检测完成: "
+            cats = []
+            for i in sorted(classifications.keys()):
+                cats.append(f"p{i}={classifications[i]}")
+            status_text += ", ".join(cats[:8])
+            if len(cats) > 8:
+                status_text += f" ... (+{len(cats)-8})"
+            self.tmpl_status.configure(text=status_text, text_color="green")
+        except Exception as e:
+            self.tmpl_status.configure(text=f"LLM 检测失败: {str(e)[:120]}", text_color="red")
 
     # ── API 测试 ──
     def _test_api(self):
@@ -137,6 +232,9 @@ class ConfigPage(ctk.CTkFrame):
         if self.shared.get('api_key'):
             self.key_entry.delete(0, 'end')
             self.key_entry.insert(0, self.shared['api_key'])
+        if self.shared.get('extract_mode'):
+            self.extract_mode.set(self.shared['extract_mode'])
+            self._on_mode_change()
 
     def _go_next(self):
         """验证所有输入后切换到大纲页。"""
@@ -164,21 +262,27 @@ class ConfigPage(ctk.CTkFrame):
         self.shared['api_base_url'] = self.url_entry.get().strip()
         self.shared['api_key'] = key
         self.shared['api_model'] = self.model_entry.get().strip()
+        self.shared['extract_mode'] = self.extract_mode.get()
 
         # 如果模板需要提取，先跑 make_template
         if not self.shared.get('is_template', False):
             from tkinter import messagebox
-            if messagebox.askyesno("提取模板", "检测到完整PPTX，需要先提取模板骨架。是否继续？"):
+            mode_label = "LLM 自适应" if self.extract_mode.get() == "llm" else "规则"
+            if messagebox.askyesno("提取模板",
+                f"检测到完整PPTX，将用「{mode_label}」模式提取模板骨架。是否继续？"):
                 self._run_make_template()
 
         self.app.switch_to_tab("大纲生成")
 
     def _run_make_template(self):
-        """在后台线程中运行模板提取。"""
-        from scripts.make_template import main as make_tmpl_main
-        threading.Thread(target=self._do_make_template, daemon=True).start()
+        """在后台线程中运行模板提取（根据模式选规则 or LLM）。"""
+        mode = self.extract_mode.get()
+        if mode == "llm":
+            threading.Thread(target=self._do_make_template_llm, daemon=True).start()
+        else:
+            threading.Thread(target=self._do_make_template_rule, daemon=True).start()
 
-    def _do_make_template(self):
+    def _do_make_template_rule(self):
         import sys
         src = self.shared['template_path']
         dst = src.replace('.pptx', '_模板.pptx')
@@ -191,3 +295,27 @@ class ConfigPage(ctk.CTkFrame):
         except Exception as e:
             from tkinter import messagebox
             messagebox.showerror("模板提取失败", str(e))
+
+    def _do_make_template_llm(self):
+        src = self.shared['template_path']
+        dst = src.replace('.pptx', '_llm_template.pptx')
+        url = self.url_entry.get().strip()
+        key = self.key_entry.get().strip()
+        model = self.model_entry.get().strip()
+
+        def progress(msg):
+            self.tmpl_status.configure(text=f"LLM 提取: {msg}", text_color="gray")
+
+        try:
+            from scripts.llm_template_extract import extract_template_llm
+            result = extract_template_llm(src, dst, url, key, model, on_progress=progress)
+            self.shared['template_path'] = dst
+            self.shared['is_template'] = True
+            cats = result['classifications']
+            summary = ", ".join(f"p{i}={t}" for i, t in sorted(cats.items()))
+            self.tmpl_status.configure(
+                text=f"✓ LLM 提取完成: {summary[:120]}", text_color="green")
+        except Exception as e:
+            from tkinter import messagebox
+            messagebox.showerror("LLM 模板提取失败", str(e))
+            self.tmpl_status.configure(text=f"LLM 提取失败: {str(e)[:120]}", text_color="red")
