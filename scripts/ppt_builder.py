@@ -322,14 +322,26 @@ def build(config, json_path='.'):
     figs_dir = resolve_path(json_path, meta.get('figs_dir', './figs'))
     indices = meta.get('template_slide_indices', {})
 
-    # 加载模板设计令牌（process/ 优先，上级目录兜底）
+    # 加载模板设计令牌（缺失或无效时当场生成）
     design_json = template_path.replace('.pptx', '_design.json')
     if not os.path.exists(design_json):
-        # 尝试上级目录
-        parent_design = os.path.join(os.path.dirname(os.path.dirname(template_path)),
-                                     os.path.basename(design_json))
-        if os.path.exists(parent_design):
-            design_json = parent_design
+        # 当场从模板提取
+        try:
+            from template_extractor import extract as extract_design
+            design = extract_design(template_path)
+            import json as _json
+            os.makedirs(os.path.dirname(design_json), exist_ok=True)
+            with open(design_json, 'w', encoding='utf-8') as f:
+                _json.dump(design, f, indent=2, ensure_ascii=False)
+            print(f"  自动生成设计令牌 → {design_json}")
+        except Exception as e:
+            # 回退上级目录
+            parent_design = os.path.join(os.path.dirname(os.path.dirname(template_path)),
+                                         os.path.basename(design_json))
+            if os.path.exists(parent_design):
+                design_json = parent_design
+            else:
+                print(f"  WARNING: 设计令牌生成失败 ({e})，使用默认值")
     init_design(design_json)
 
     prs = Presentation(template_path)
