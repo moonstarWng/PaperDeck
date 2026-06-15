@@ -314,12 +314,11 @@ def generalize_text(prs):
                 text = shape.text_frame.text.strip()
                 if not text or text.isdigit() or (len(text) <= 2 and text.isascii()):
                     continue  # 保留数字编号
-                # 非数字文本 → 章节标题占位
-                tf = shape.text_frame
-                tf.clear()
-                p = tf.paragraphs[0]
-                r = p.add_run()
-                r.text = '章节标题'
+                # 非数字文本 → 只改文字，保留原始字体（不 clear 不 add_run）
+                for para in shape.text_frame.paragraphs:
+                    for run in para.runs:
+                        if run.text.strip():
+                            run.text = '章节标题'
 
         elif cat == 'TOC':
             # TOC: 保留第一对，其余清空。按位置（X 坐标）识别编号/标题
