@@ -392,17 +392,7 @@ class OutlinePage(ctk.CTkFrame):
             messagebox.showerror("错误", "请至少配置一个章节")
             return
 
-        # 检查模板章节页是否足够
-        tmpl_path = self.shared.get('template_path', '')
-        if tmpl_path and os.path.exists(tmpl_path):
-            from pptx import Presentation
-            from scripts.make_template import classify
-            prs = Presentation(tmpl_path)
-            tmpl_section_count = sum(1 for s in prs.slides if classify(s).startswith('SECTION_'))
-            if len(sections) > tmpl_section_count:
-                messagebox.showwarning("章节页不足",
-                    f"你配置了 {len(sections)} 个章节，但模板只有 {tmpl_section_count} 个章节页。\n"
-                    f"超出部分将复用最后一个章节页。")
+        # 构建器自动按需克隆章节页
 
         section_divider_edits = []
         for i, (title, _) in enumerate(sections):

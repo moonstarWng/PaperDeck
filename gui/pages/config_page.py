@@ -384,6 +384,16 @@ class ConfigPage(ctk.CTkFrame):
             sys.argv = ['make_template.py', src, dst]
             from scripts.make_template import main as make_tmpl_main
             make_tmpl_main()
+            # 同步生成 design.json 到 process/
+            try:
+                from scripts.template_extractor import extract as extract_design
+                design = extract_design(dst)
+                import json as _json
+                design_path = dst.replace('.pptx', '_design.json')
+                with open(design_path, 'w', encoding='utf-8') as f:
+                    _json.dump(design, f, indent=2, ensure_ascii=False)
+            except Exception:
+                pass
             self.shared['template_path'] = dst
             self.shared['is_template'] = True
             self.tmpl_status.configure(
