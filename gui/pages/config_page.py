@@ -123,20 +123,29 @@ class ConfigPage(ctk.CTkFrame):
             self._detect_template_rule(path)
 
     def _detect_template_rule(self, path):
-        """规则模式：用 classify() 做检测。"""
+        """规则模式：用 classify() + 占位符检测。"""
         try:
             from pptx import Presentation
             prs = Presentation(path)
             from scripts.make_template import classify
-            t_count, c_count = 0, 0
+            t_count, c_count, placeholder_count = 0, 0, 0
             for slide in prs.slides:
                 cat = classify(slide)
                 if cat.startswith('SECTION_') or cat in ('COVER', 'TOC', 'THANKS', 'SUMMARY'):
                     t_count += 1
                 elif cat in ('CONTENT', 'CONTENT_FRAME', 'DATA', 'DISCUSSION'):
                     c_count += 1
-            ratio = c_count / max(len(prs.slides), 1)
-            is_tpl = ratio < 0.2
+                    # 检查是否已被占位符替换（LLM 提取过的模板）
+                    all_text = ' '.join(sh.text_frame.text for sh in slide.shapes if sh.has_text_frame)
+                    if '此处填充' in all_text or '章节标题' in all_text or '论文标题' in all_text:
+                        placeholder_count += 1
+            # 如果大部分内容页已是占位符，视为已提取的模板
+            if c_count > 0 and placeholder_count / c_count > 0.5:
+                is_tpl = True
+                ratio = 0.0
+            else:
+                ratio = c_count / max(len(prs.slides), 1)
+                is_tpl = ratio < 0.2
             self.shared['is_template'] = is_tpl
             self._update_extract_ui(is_tpl, ratio)
         except Exception as e:
