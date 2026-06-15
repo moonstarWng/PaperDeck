@@ -263,10 +263,26 @@ def main():
     print(f"PaperDeck v{VERSION} — 便携包构建")
     print("=" * 50)
 
-    # 清理旧的 portable 目录
-    if os.path.exists(PORTABLE_DIR):
-        print(f"\n清理旧构建...")
+    # ── 增量构建：已有 portable/python/ 则不清理，仅更新项目文件 ──
+    force_clean = '--clean' in sys.argv or '--force' in sys.argv
+    if force_clean and os.path.exists(PORTABLE_DIR):
+        print(f"\n[0/6] 强制清理旧构建...")
         shutil.rmtree(PORTABLE_DIR)
+    elif not os.path.exists(os.path.join(PORTABLE_DIR, 'python', 'python.exe')):
+        # 首次构建，或 python embeddable 缺失时才清理
+        if os.path.exists(PORTABLE_DIR):
+            print(f"\n[0/6] Python 环境缺失，清理重建...")
+            shutil.rmtree(PORTABLE_DIR)
+    else:
+        print(f"\n[0/6] 检测到已有 Python 环境，增量构建 (仅更新项目文件)")
+        # 清理上次的项目文件，保留 python/ 和 Lib/ 依赖
+        for item in os.listdir(PORTABLE_DIR):
+            p = os.path.join(PORTABLE_DIR, item)
+            if item not in ('python', 'Lib'):
+                if os.path.isfile(p) or os.path.islink(p):
+                    os.remove(p)
+                elif os.path.isdir(p):
+                    shutil.rmtree(p)
 
     python_dir = os.path.abspath(download_python())
     pip_exe = install_pip(python_dir)
