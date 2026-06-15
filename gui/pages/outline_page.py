@@ -272,29 +272,35 @@ class OutlinePage(ctk.CTkFrame):
             messagebox.showerror("错误", "请至少启用一个章节")
             return
 
-        section_assign_lines = []
-        result_page_total = 0
+        # ── 章节约束（强约束，LLM 必须遵守）──
+        section_spec = []
         for i, (title, pages) in enumerate(sections):
-            section_assign_lines.append(f"    0{i+1} → {title} ({pages} 页)")
-            if pages > 1:
-                result_page_total += pages
+            section_spec.append(f"  章节{i+1}(编号0{i+1}): {title} — 包含 {pages} 个内容页")
+        has_paper_info = self.paper_info_var.get()
 
         constraint = (
-            f"\n\n## 章节约束（严格遵守）\n"
-            f"章节数和标题:\n" + "\n".join(section_assign_lines) + "\n"
-            f"\n规则:\n"
-            f"1. 章节分隔页使用上述编号和标题，禁止增减章节\n"
-            f"2. 章节标题为 {', '.join(t for t, _ in sections)}\n"
-            f"3. 每个章节下的内容页数严格等于指定的页数\n"
-            f"4. 封面、目录、致谢始终包含\n"
-            f"5. 每个 result 页恰好 3 行要点\n"
-            f"6. 封面: presenter='xxx', date='202X年X月'\n"
+            f"\n\n## ⚠️ 章节结构约束（不遵守将导致生成失败）\n"
+            f"你必须严格按照以下结构生成 slides 数组，共 {len(sections)} 个章节:\n"
+            + "\n".join(section_spec) + "\n"
+            f"\nslides 数组必须包含:\n"
+            f"  1. 先放 'keep' + 'cover'\n"
+            f"  2. 再放 'keep' + 'toc'\n"
         )
-        has_paper_info = self.paper_info_var.get()
+        for i, (title, pages) in enumerate(sections):
+            constraint += f"  3+{i}. 'keep' + 'section' (index={i})  → 章节分隔页「{title}」\n"
+            constraint += f"       然后恰好 {pages} 个内容页 (type=result/author/background/summary/discussion)\n"
+        constraint += (
+            f"  N. 最后放 'keep' + 'thanks'\n"
+            f"\n规则:\n"
+            f"1. 总共恰好 {len(sections)} 个 section divider，不能多也不能少\n"
+            f"2. 每个 section 下的内容页数等于上述指定值\n"
+            f"3. 封面: presenter='xxx', date='202X年X月'\n"
+            f"4. 每个 result 页恰好 3 行要点\n"
+        )
         if has_paper_info:
-            constraint += "7. 生成 paper_info 页（PDF首页 + 原文链接）\n"
+            constraint += "5. 在第一个 section 后插入 paper_info 页\n"
         else:
-            constraint += "7. 不要生成 paper_info 页\n"
+            constraint += "5. 不要生成 paper_info 页\n"
 
         figs = self._get_figs_list()
         prompt = (
@@ -340,6 +346,7 @@ class OutlinePage(ctk.CTkFrame):
     # ── 构建 ──
     def _go_build(self):
         """从树形编辑器导出 JSON 并跳转到构建页。"""
+        log_step('outline', '开始构建大纲')
         figs_dir = self.shared.get('figs_dir', '')
         self.editor.set_figs_dir(figs_dir)
 

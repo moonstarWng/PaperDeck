@@ -175,7 +175,13 @@ class OutlineEditor(ctk.CTkScrollableFrame):
             if i not in self.widgets:
                 continue
             content = self.widgets[i]
-            children = [c for c in content.winfo_children() if isinstance(c, ctk.CTkFrame)]
+            # 控件可能已被销毁（线程切换等），跳过
+            try:
+                if not content.winfo_exists():
+                    continue
+                children = [c for c in content.winfo_children() if isinstance(c, ctk.CTkFrame)]
+            except Exception:
+                continue
             entry_idx = 0
             for row_frame in children:
                 entries = [c for c in row_frame.winfo_children() if isinstance(c, ctk.CTkEntry)]
