@@ -138,43 +138,50 @@ def edit_toc(slide, toc_map, section_titles=None):
 
     # 自动构建映射：无 toc_map 但有 section_titles 时，按顺序替换 TOC 文本
     if not toc_map and section_titles:
-        # TOC 元素按 XML 文档序排列（数字+标题成对出现）
-        # 例如: [CONTENTS, 01, Research Team, 02, Background, 03, Results, 04, Discussion]
-        all_toc = []
-        for t_elem in slide._element.iter(f'{{{NS_A}}}t'):
-            txt = (t_elem.text or '').strip()
-            if txt:
-                all_toc.append((t_elem, txt))
+        # 收集 TOC 条目对 (number_shape, title_shape) — 按位置识别
+        num_shapes = []   # X < 2.0in → 编号
+        title_shapes = [] # X >= 2.0in → 标题
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            if 'TEXT_BOX' not in str(shape.shape_type):
+                continue
+            txt = shape.text_frame.text.strip()
+            x = shape.left / 914400
+            if txt.upper() in ('CONTENTS', '目录', '目 录'):
+                continue
+            if x < 2.0:
+                num_shapes.append(shape)
+            else:
+                title_shapes.append(shape)
+        num_shapes.sort(key=lambda s: s.top)
+        title_shapes.sort(key=lambda s: s.top)
 
-        # 跳过第一个（"CONTENTS"/"目录"），剩余按对处理
-        # 每对 = [数字, 标题]
-        entries_start = 1  # 跳过 TOC 标题
-        n_entries = (len(all_toc) - entries_start) // 2  # 模板中的条目对数
+        n_existing = min(len(num_shapes), len(title_shapes))
         n_needed = len(section_titles)
 
-        # 替换已有条目对
-        for pair_idx in range(min(n_entries, n_needed)):
-            idx = entries_start + pair_idx * 2
-            if idx + 1 < len(all_toc):
-                all_toc[idx][0].text = f'0{pair_idx + 1}'
-                all_toc[idx + 1][0].text = section_titles[pair_idx]
+        # 替换已有条目
+        for i in range(min(n_existing, n_needed)):
+            if i < len(num_shapes):
+                _set_shape_text(num_shapes[i], f'0{i+1}')
+            if i < len(title_shapes):
+                _set_shape_text(title_shapes[i], section_titles[i])
 
-        # 超出模板容量的条目：在底部追加简单文本框
-        if n_needed > n_entries:
-            # 找最后一个条目的 Y 位置
-            y_start = 5.0
-            if n_entries > 0:
-                for shape in slide.shapes:
-                    if all_toc[-1][0] in list(shape._element.iter(f'{{{NS_A}}}t')):
-                        y_start = (shape.top + shape.height) / 914400 + 0.2
-                        break
-            for pi in range(n_entries, n_needed):
-                y = y_start + (pi - n_entries) * 0.35
-                tb = slide.shapes.add_textbox(Inches(1.5), Inches(y), Inches(5), Inches(0.3))
-                p = tb.text_frame.paragraphs[0]
-                r = p.add_run()
-                r.text = f'0{pi + 1}  {section_titles[pi]}'
-                r.font.size = Pt(14)
+        # 不足时克隆第一对条目
+        if n_needed > n_existing and n_existing > 0:
+            import copy
+            spacing = (title_shapes[0].top - num_shapes[0].top) / 914400  # 保持原始间距
+            row_h = max(num_shapes[0].height, title_shapes[0].height) / 914400 + 0.15
+            for pi in range(n_existing, n_needed):
+                y_offset_in = (pi - n_existing + 1) * row_h
+                # 克隆编号 shape
+                ns_clone = _clone_shape(slide, num_shapes[0])
+                ns_clone.top += int(Inches(y_offset_in))
+                _set_shape_text(ns_clone, f'0{pi+1}')
+                # 克隆标题 shape
+                ts_clone = _clone_shape(slide, title_shapes[0])
+                ts_clone.top += int(Inches(y_offset_in))
+                _set_shape_text(ts_clone, section_titles[pi])
         return
 
     if not toc_map:
@@ -184,6 +191,29 @@ def edit_toc(slide, toc_map, section_titles=None):
             for old, new in toc_map.items():
                 if old in t_elem.text:
                     t_elem.text = t_elem.text.replace(old, new)
+
+
+def _set_shape_text(shape, text):
+    """替换 shape 中所有文本为指定文字。"""
+    if shape.has_text_frame:
+        for para in shape.text_frame.paragraphs:
+            for run in para.runs:
+                run.text = ''
+        shape.text_frame.paragraphs[0].runs[0].text = text if shape.text_frame.paragraphs[0].runs else ''
+        if not shape.text_frame.paragraphs[0].runs:
+            shape.text_frame.paragraphs[0].add_run().text = text
+
+
+def _clone_shape(slide, src_shape):
+    """在 slide 上克隆一个 shape（XML 深拷贝），返回新的 shape 对象。"""
+    import copy
+    new_el = copy.deepcopy(src_shape._element)
+    slide.shapes._spTree.append(new_el)
+    # 返回新 shape（通过名称匹配）
+    for s in slide.shapes:
+        if s._element is new_el:
+            return s
+    return None
 
 
 def edit_section_divider(slide, number, title):

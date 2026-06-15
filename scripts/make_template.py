@@ -322,20 +322,57 @@ def generalize_text(prs):
                 r.text = '章节标题'
 
         elif cat == 'TOC':
+            # TOC: 保留第一对，其余清空。按位置（X 坐标）识别编号/标题
+            num_shapes = []   # X < 2.0in → 编号
+            title_shapes = [] # X > 2.0in → 标题
             for shape in slide.shapes:
                 if not shape.has_text_frame:
                     continue
-                for para in shape.text_frame.paragraphs:
-                    for run in para.runs:
-                        t = run.text.strip()
-                        # 保留纯数字项 (01, 02...) 和 TOC 标题
-                        if t.isdigit() and len(t) <= 2:
-                            continue
-                        if t.upper() in ('CONTENTS', '目录', '目 录'):
-                            continue
-                        # 其余替换
-                        if len(t) > 2:
-                            run.text = '章节名称'
+                if 'TEXT_BOX' not in str(shape.shape_type):
+                    continue  # 只处理文本框，排除矩形等装饰形状
+                txt = shape.text_frame.text.strip()
+                x = shape.left / 914400
+                if txt.upper() in ('CONTENTS', '目录', '目 录'):
+                    continue
+                if x < 2.0:
+                    num_shapes.append(shape)
+                else:
+                    title_shapes.append(shape)  # x >= 2.0 的全部当标题
+
+            # 按 Y 坐标排序后配对
+            num_shapes.sort(key=lambda s: s.top)
+            title_shapes.sort(key=lambda s: s.top)
+            pairs = []
+            for i in range(min(len(num_shapes), len(title_shapes))):
+                pairs.append((num_shapes[i], title_shapes[i]))
+
+            # 清空除第一对外所有条目
+            for i, (ns, ts) in enumerate(pairs):
+                if i == 0:
+                    _set_shape_text_simple(ns, '01')
+                    _set_shape_text_simple(ts, '章节名称')
+                else:
+                    _clear_shape_text(ns)
+                    _clear_shape_text(ts)
+
+
+def _clear_shape_text(shape):
+    """清空 shape 中所有文字。"""
+    if shape and shape.has_text_frame:
+        for para in shape.text_frame.paragraphs:
+            for run in para.runs:
+                run.text = ''
+
+
+def _set_shape_text_simple(shape, text):
+    """设置 shape 的第一个 run 文字（无则新建）。"""
+    if not shape or not shape.has_text_frame:
+        return
+    tf = shape.text_frame
+    if tf.paragraphs and tf.paragraphs[0].runs:
+        tf.paragraphs[0].runs[0].text = text
+    elif tf.paragraphs:
+        tf.paragraphs[0].add_run().text = text
 
 
 # ═══════════════════════════════════════════
