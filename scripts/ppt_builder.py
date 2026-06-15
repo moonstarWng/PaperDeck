@@ -328,9 +328,12 @@ def build(config, json_path='.'):
     if 'toc_replacements' in config:
         stitles = [sde['title'] for sde in section_divider_map] if section_divider_map else None
         edit_toc(prs.slides[indices.get('toc', 1)], config.get('toc_replacements', {}), stitles)
+    # 编辑章节分隔页：模板不够时只编辑已有的，超出部分警告
     for i, sde in enumerate(section_divider_map):
         if i < len(section_indices):
             edit_section_divider(prs.slides[section_indices[i]], sde['number'], sde['title'])
+        else:
+            print(f"  WARNING: 章节 '{sde['title']}' 超出模板容量（模板仅 {len(section_indices)} 个章节页），跳过")
     # 致谢页保持模板原文，不做任何修改
 
     # ── 重排序幻灯片 ──

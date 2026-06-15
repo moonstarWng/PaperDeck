@@ -139,7 +139,8 @@ def classify(slide):
     """
     types = {}
     has_freeform = False
-    has_dark_bg = False       # AUTO_SHAPE 矩形做深色背景（兼容非 FREEFORM 的模板）
+    has_dark_bg = False       # 深色背景 → 章节页
+    has_cover_bg = False      # 任意全幅背景（含白色）→ 封面
     all_text = ''
     label_count = 0
     has_frame = False
@@ -155,11 +156,21 @@ def classify(slide):
             name = shape.name.lower() if hasattr(shape, 'name') else ''
             if '圆角' in name or 'round' in name:
                 has_frame = True
-            # 检测全幅深色背景矩形（用于封面和章节页，替代 FREEFORM）
             w = shape.width / 914400
             h = shape.height / 914400
-            if w > 10 or h > 5:
-                has_dark_bg = True
+            is_full_bg = w > 10 and h > 5        # 全幅背景
+            is_sidebar = h > 5 and 0.5 < w < 5   # 左侧竖条
+            is_top_bar = w > 10 and h < 1.5       # 顶部横条（不算背景）
+            if (is_full_bg or is_sidebar) and not is_top_bar:
+                has_cover_bg = True  # 有大型背景形状（不限颜色）
+                try:
+                    fill = shape.fill
+                    if fill.type is not None:
+                        rgb = fill.fore_color.rgb
+                        if max(rgb[0], rgb[1], rgb[2]) < 80:
+                            has_dark_bg = True  # 深色 → 章节页
+                except Exception:
+                    pass
 
         if shape.has_text_frame:
             t = shape.text_frame.text.strip()
@@ -167,8 +178,9 @@ def classify(slide):
             if len(t) == 1 and t.isascii() and t.isalpha() and t == t.upper():
                 label_count += 1
 
-    # 只要是有大背景矩形或 FREEFORM，都视为"有装饰背景"
-    has_background = has_freeform or has_dark_bg
+    # 章节页需要深色背景，封面只需有大型背景形状（不限颜色）
+    has_section_bg = has_freeform or has_dark_bg
+    has_cover_bg_any = has_freeform or has_cover_bg
     chapter_match = re.search(r'\b(\d{1,2})\b', all_text)
 
     # ── 按优先级分类（THANKS 和 TOC 优先于 SECTION/COVER）──
@@ -183,10 +195,10 @@ def classify(slide):
     if types.get('GROUP (6)', 0) >= 2 or '目录' in all_text or 'CONTENTS' in all_text.upper():
         return 'TOC'
 
-    if has_background and chapter_match and '目录' not in all_text:
+    if has_section_bg and chapter_match and '目录' not in all_text:
         return f'SECTION_{chapter_match.group(1)}'
 
-    if has_background and types.get('TEXT_BOX (17)', 0) <= 3:
+    if has_cover_bg_any and types.get('TEXT_BOX (17)', 0) <= 3:
         return 'COVER'
 
     if label_count >= 3:
