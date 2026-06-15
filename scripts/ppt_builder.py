@@ -137,17 +137,43 @@ def edit_toc(slide, toc_map, section_titles=None):
 
     # 自动构建映射：无 toc_map 但有 section_titles 时，按顺序替换 TOC 文本
     if not toc_map and section_titles:
-        toc_items = []
+        # TOC 元素按 XML 文档序排列（数字+标题成对出现）
+        # 例如: [CONTENTS, 01, Research Team, 02, Background, 03, Results, 04, Discussion]
+        all_toc = []
         for t_elem in slide._element.iter(f'{{{NS_A}}}t'):
-            if t_elem.text and t_elem.text.strip() and not t_elem.text.strip().isdigit():
-                txt = t_elem.text.strip()
-                if len(txt) >= 2 and txt not in [t.text.strip() for t in toc_items]:
-                    toc_items.append(t_elem)
-        # 跳过第一个（TOC 标题如 "CONTENTS"/"目录"），替换剩余
-        section_items = toc_items[1:] if len(toc_items) > len(section_titles) else toc_items
-        for i, t_elem in enumerate(section_items):
-            if i < len(section_titles):
-                t_elem.text = section_titles[i]
+            txt = (t_elem.text or '').strip()
+            if txt:
+                all_toc.append((t_elem, txt))
+
+        # 跳过第一个（"CONTENTS"/"目录"），剩余按对处理
+        # 每对 = [数字, 标题]
+        entries_start = 1  # 跳过 TOC 标题
+        n_entries = (len(all_toc) - entries_start) // 2  # 模板中的条目对数
+        n_needed = len(section_titles)
+
+        # 替换已有条目对
+        for pair_idx in range(min(n_entries, n_needed)):
+            idx = entries_start + pair_idx * 2
+            if idx + 1 < len(all_toc):
+                all_toc[idx][0].text = f'0{pair_idx + 1}'
+                all_toc[idx + 1][0].text = section_titles[pair_idx]
+
+        # 超出模板容量的条目：在底部追加简单文本框
+        if n_needed > n_entries:
+            # 找最后一个条目的 Y 位置
+            y_start = 5.0
+            if n_entries > 0:
+                for shape in slide.shapes:
+                    if all_toc[-1][0] in list(shape._element.iter(f'{{{NS_A}}}t')):
+                        y_start = (shape.top + shape.height) / 914400 + 0.2
+                        break
+            for pi in range(n_entries, n_needed):
+                y = y_start + (pi - n_entries) * 0.35
+                tb = slide.shapes.add_textbox(Inches(1.5), Inches(y), Inches(5), Inches(0.3))
+                p = tb.text_frame.paragraphs[0]
+                r = p.add_run()
+                r.text = f'0{pi + 1}  {section_titles[pi]}'
+                r.font.size = Pt(14)
         return
 
     if not toc_map:
