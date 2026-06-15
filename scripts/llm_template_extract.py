@@ -306,9 +306,7 @@ def parse_element_response(response_text):
 # Step 4: 应用占位符替换
 # ═══════════════════════════════════════════
 
-PLACEHOLDER_BODY_FONT = Pt(16)
-PLACEHOLDER_TITLE_FONT = Pt(24)
-PLACEHOLDER_COLOR = (0x99, 0x99, 0x99)  # 灰色占位文字
+PLACEHOLDER_COLOR = (0x99, 0x99, 0x99)  # 灰色占位文字/图片背景
 
 
 def apply_placeholders(prs, slide_index, element_map):
@@ -332,24 +330,18 @@ def apply_placeholders(prs, slide_index, element_map):
 
         if role == 'title':
             if shape.has_text_frame:
-                # 清除原有文字，改为占位
-                tf = shape.text_frame
-                tf.clear()
-                p = tf.paragraphs[0]
-                r = p.add_run()
-                r.text = '此处填充标题'
-                r.font.size = PLACEHOLDER_TITLE_FONT
-                r.font.color.rgb = gray
+                # 只改文字，保留原始字体
+                for para in shape.text_frame.paragraphs:
+                    for run in para.runs:
+                        if run.text.strip():
+                            run.text = '此处填充标题'
 
         elif role == 'body':
             if shape.has_text_frame:
-                tf = shape.text_frame
-                tf.clear()
-                p = tf.paragraphs[0]
-                r = p.add_run()
-                r.text = '此处填充文本'
-                r.font.size = PLACEHOLDER_BODY_FONT
-                r.font.color.rgb = gray
+                for para in shape.text_frame.paragraphs:
+                    for run in para.runs:
+                        if run.text.strip():
+                            run.text = '此处填充文本'
 
         elif role == 'image':
             is_picture = 'PICTURE' in str(shape.shape_type)
@@ -497,11 +489,11 @@ def extract_template_llm(input_path, output_path, base_url, api_key, model,
             elif shape.has_text_frame and shape.text_frame.text.strip():
                 role = element_map.get(si, '')
                 if role not in ('title', 'body', 'decoration'):
-                    # 未被识别的文本 → 替换
-                    tf = shape.text_frame; tf.clear()
-                    p = tf.paragraphs[0]; r = p.add_run()
-                    r.text = '此处填充文本'; r.font.size = PLACEHOLDER_BODY_FONT
-                    r.font.color.rgb = gray
+                    # 未被识别的文本 → 只改文字，保留原始字体
+                    for para in shape.text_frame.paragraphs:
+                        for run in para.runs:
+                            if run.text.strip():
+                                run.text = '此处填充文本'
 
     # 删除非内容页的所有图片
     for i in range(total):
