@@ -167,21 +167,32 @@ def edit_toc(slide, toc_map, section_titles=None):
             if i < len(title_shapes):
                 _set_shape_text(title_shapes[i], section_titles[i])
 
-        # 不足时克隆第一对条目
+        # 不足时克隆第一对整组元素（编号+标题+装饰矩形），从上到下均匀分布
         if n_needed > n_existing and n_existing > 0:
             import copy
-            spacing = (title_shapes[0].top - num_shapes[0].top) / 914400  # 保持原始间距
-            row_h = max(num_shapes[0].height, title_shapes[0].height) / 914400 + 0.15
+            # 收集第一对的所有相关 shapes（编号+标题+它们之间的装饰线）
+            first_num = num_shapes[0]
+            first_title = title_shapes[0]
+            y0 = first_num.top
+            y1 = first_title.top + first_title.height
+            row_h = (y1 - y0) * 1.3  # 行高（含间距）
+
+            # 紧贴在最后一个已有条目下方逐个添加
+            last_y = max(num_shapes[-1].top, title_shapes[-1].top) + num_shapes[-1].height
+            spacing = last_y - max(num_shapes[0].top, title_shapes[0].top) - num_shapes[0].height
+            if spacing < Inches(0.1):
+                spacing = Inches(int(row_h))
             for pi in range(n_existing, n_needed):
-                y_offset_in = (pi - n_existing + 1) * row_h
-                # 克隆编号 shape
-                ns_clone = _clone_shape(slide, num_shapes[0])
-                ns_clone.top += int(Inches(y_offset_in))
-                _set_shape_text(ns_clone, f'0{pi+1}')
-                # 克隆标题 shape
-                ts_clone = _clone_shape(slide, title_shapes[0])
-                ts_clone.top += int(Inches(y_offset_in))
-                _set_shape_text(ts_clone, section_titles[pi])
+                # 克隆编号
+                ns = _clone_shape(slide, num_shapes[-1])
+                ns.top = last_y
+                _set_shape_text(ns, f'0{pi+1}')
+                # 克隆标题
+                ts = _clone_shape(slide, title_shapes[-1])
+                ts.top = last_y + (title_shapes[-1].top - num_shapes[-1].top)
+                _set_shape_text(ts, section_titles[pi])
+                # 更新 last_y
+                last_y = max(ns.top, ts.top) + max(ns.height, ts.height) + spacing
         return
 
     if not toc_map:
@@ -298,32 +309,67 @@ def build(config, json_path='.'):
 
     # ── 章节页不够时用代码重建（必须在 new_order 构建之前）──
     def _add_section_slide(prs, base_slide):
-        """重建一个与模板章节页布局一致的空白章节页（带占位文字供 edit 替换）。"""
+        """重建一个与模板章节页布局一致的章节页。从模板复制字体样式。"""
         from pptx.dml.color import RGBColor
+        # 从模板读取字体
+        tmpl_num_font = None
+        tmpl_title_font = None
+        for sh in base_slide.shapes:
+            if sh.has_text_frame:
+                for p in sh.text_frame.paragraphs:
+                    for r in p.runs:
+                        if r.text.strip().isdigit() and len(r.text.strip()) == 2:
+                            tmpl_num_font = r.font
+                        elif len(r.text.strip()) >= 2:
+                            tmpl_title_font = r.font
+
         layout = base_slide.slide_layout
         new_s = prs.slides.add_slide(layout)
-        # 全幅深色背景
+        # 全幅深色背景（从模板读颜色）
+        bg_color = RGBColor(0x1A, 0x1A, 0x1A)
+        accent = RGBColor(0xE6, 0x39, 0x46)
+        try:
+            for sh in base_slide.shapes:
+                if sh.width/914400 > 12 and sh.height/914400 > 6:
+                    if sh.fill.type is not None:
+                        bg_color = sh.fill.fore_color.rgb
+                        break
+        except: pass
         bg = new_s.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.33), Inches(7.5))
-        bg.fill.solid(); bg.fill.fore_color.rgb = RGBColor(0x1A, 0x1A, 0x1A); bg.line.fill.background()
+        bg.fill.solid(); bg.fill.fore_color.rgb = bg_color; bg.line.fill.background()
         # 左侧竖条
         bar = new_s.shapes.add_shape(1, Inches(0), Inches(0), Inches(1.2), Inches(7.5))
-        bar.fill.solid(); bar.fill.fore_color.rgb = RGBColor(0xE6, 0x39, 0x46); bar.line.fill.background()
-        # 编号 (TextBox) —— 放占位数字"00"供 edit_section_divider 替换
+        bar.fill.solid(); bar.fill.fore_color.rgb = accent; bar.line.fill.background()
+        # 编号 TextBox
         num_box = new_s.shapes.add_textbox(Inches(1.5), Inches(2.5), Inches(1.5), Inches(1.0))
         p = num_box.text_frame.paragraphs[0]; p.alignment = PP_ALIGN.LEFT
         r = p.add_run(); r.text = '00'
-        r.font.size = Pt(56); r.font.bold = True; r.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-        # 标题 (TextBox) —— 放占位文字供 edit_section_divider 替换
+        if tmpl_num_font:
+            r.font.size = tmpl_num_font.size; r.font.bold = tmpl_num_font.bold
+            r.font.name = tmpl_num_font.name
+            try: r.font.color.rgb = tmpl_num_font.color.rgb
+            except: r.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+        else:
+            r.font.size = Pt(56); r.font.bold = True
+            r.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF); r.font.name = 'Arial'
+        # 标题 TextBox
         title_box = new_s.shapes.add_textbox(Inches(3.0), Inches(2.5), Inches(7.0), Inches(1.0))
         tp = title_box.text_frame.paragraphs[0]
         tr = tp.add_run(); tr.text = 'Section Title'
-        tr.font.size = Pt(44); tr.font.bold = True; tr.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+        if tmpl_title_font:
+            tr.font.size = tmpl_title_font.size; tr.font.bold = tmpl_title_font.bold
+            tr.font.name = tmpl_title_font.name
+            try: tr.font.color.rgb = tmpl_title_font.color.rgb
+            except: tr.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+        else:
+            tr.font.size = Pt(44); tr.font.bold = True
+            tr.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF); tr.font.name = 'Arial'
         # 装饰线
         deco = new_s.shapes.add_shape(1, Inches(1.5), Inches(3.8), Inches(3.0), Pt(2))
-        deco.fill.solid(); deco.fill.fore_color.rgb = RGBColor(0xE6, 0x39, 0x46); deco.line.fill.background()
+        deco.fill.solid(); deco.fill.fore_color.rgb = accent; deco.line.fill.background()
         # 底部横条
         bot = new_s.shapes.add_shape(1, Inches(0), Inches(7.35), Inches(13.33), Pt(3))
-        bot.fill.solid(); bot.fill.fore_color.rgb = RGBColor(0xE6, 0x39, 0x46); bot.line.fill.background()
+        bot.fill.solid(); bot.fill.fore_color.rgb = accent; bot.line.fill.background()
         return new_s
 
     if section_indices and section_divider_map and len(section_indices) < len(section_divider_map):
