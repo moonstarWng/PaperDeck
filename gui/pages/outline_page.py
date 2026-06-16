@@ -252,7 +252,6 @@ class OutlinePage(ctk.CTkFrame):
                             text=f"读取中... {c}/{total}", text_color="gray"))
             full_text = "\n\n".join(text_parts)
             self.shared['paper_text'] = full_text
-            self._set_state(self.STATE_READY)
             self._safe_ui(lambda: self.status.configure(
                 text=f"✓ 已读取 {total} 页，共 {len(full_text)} 字符。正在提取元数据...", text_color="gray"))
             self._extract_metadata(full_text)
@@ -291,6 +290,7 @@ class OutlinePage(ctk.CTkFrame):
                 if p.get('year'):
                     meta['journal'] = f"{meta['journal']} ({p['year']})".strip()
                 self._apply_metadata(meta)
+                self._set_state(self.STATE_READY)
                 self._safe_ui(lambda: self.status.configure(
                     text="✓ 元数据已获取 (Semantic Scholar)", text_color="green"))
                 return
@@ -324,6 +324,7 @@ class OutlinePage(ctk.CTkFrame):
 
     def _apply_metadata_and_status(self, meta):
         self._apply_metadata(meta)
+        self._set_state(self.STATE_READY)
         self.status.configure(text="✓ 元数据已提取，可点击「生成大纲」", text_color="green")
 
     # ── 生成大纲（任务流水线）──
