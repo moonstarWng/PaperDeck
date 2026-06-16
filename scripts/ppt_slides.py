@@ -166,9 +166,11 @@ def build_summary_slide(prs, data):
     # ── 底部结论横幅 ──
     conclusions = data.get('conclusions', [])
     if conclusions:
-        R(slide, 0.45, 4.2, 12.4, 2.7, PALETTE_LIGHT, rounded=True)
+        conc_h = max(1.5, 0.6 + len(conclusions) * 0.45)
+        conc_h = min(3.5, conc_h)
+        R(slide, 0.45, 4.2, 12.4, conc_h, PALETTE_LIGHT, rounded=True)
         T(slide, 0.7, 4.3, 11.9, 0.35, '核心结论', sz=Pt(18), bold=True, color=PALETTE_PRIMARY)
-        M(slide, 0.7, 4.7, 11.9, 2.0, conclusions, sz=BODY_SIZE, color=DARK)
+        M(slide, 0.7, 4.75, 11.9, conc_h - 0.6, conclusions, sz=BODY_SIZE, color=DARK)
 
     return slide
 
@@ -238,8 +240,8 @@ def build_discussion2_slide(prs, data):
 
     # 左栏
     n_left = max(len(left_items), 1); n_right = max(len(right_items), 1)
-    max_items = max(n_left, n_right)
-    col_h = min(5.5, 0.6 * max_items + 0.5)  # 动态列高，每项约 0.6in
+    max_items = max(n_left, n_right, 1)
+    col_h = min(5.5, 0.75 * max_items + 0.6)  # 动态列高，每项约 0.75in
     R(slide, 0.4, 1.1, 6.0, col_h, PALETTE_LIGHT, rounded=True)
     T(slide, 0.7, 1.25, 5.4, 0.4, left_title, sz=Pt(20), bold=True, color=PALETTE_PRIMARY)
     M(slide, 0.7, 1.8, 5.4, col_h - 0.6, left_items, sz=BODY_SIZE, color=DARK)
