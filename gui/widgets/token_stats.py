@@ -11,7 +11,7 @@ class TokenStatsWindow(ctk.CTkToplevel):
         self.title("Token 用量统计")
         self.geometry("600x500")
         self.minsize(500, 400)
-        self.configure(fg_color="#2B2D31")
+        self.configure(fg_color="#3A3C42")
         self.after(50, lambda: (self.lift(), self.focus_force()))
         self.after(100, self._refresh)
 
