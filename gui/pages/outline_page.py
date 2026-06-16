@@ -388,24 +388,23 @@ class OutlinePage(ctk.CTkFrame):
                 guess_type = _guess_type(sec_title)
 
                 def _gen_section(title, pages, stype, retry=0):
-                    # 根据类型给不同的 prompt
+                    # 根据类型给精确的 prompt，严格控制页数
                     if stype == 'author':
-                        type_hint = '{{"type":"author","journal":{{"name":"期刊名","if":"IF","doi":"DOI","date":"日期"}},"institutions":["机构1"],"authors":"作者列表","prior_work":["前期基础1"]}}'
+                        type_hint = '[{{"type":"author","journal":{{"name":"","if":"","doi":"","date":""}},"institutions":[""],"authors":"","prior_work":[""]}}]'
                     elif stype == 'background':
-                        type_hint = '{{"type":"background","cards":[{{"title":"卡片标题","body":"内容","color":"teal"}}],"hypothesis":"核心假说"}}'
+                        type_hint = '[{{"type":"background","cards":[{{"title":"","body":"","color":"teal"}}],"hypothesis":""}}]'
                     elif stype == 'summary':
-                        type_hint = '{{"type":"summary","flow_steps":[{{"text":"步骤","color":"teal"}}],"evidence_cards":[{{"title":"证据","detail":"详情"}}],"conclusion":"结论"}}'
+                        type_hint = '[{{"type":"summary","flow_steps":[{{"text":"","color":"teal"}}],"evidence_cards":[{{"title":"","detail":""}}],"conclusion":""}}]'
                     elif stype == 'discussion1':
-                        type_hint = '{{"type":"discussion1","items":[{{"number":"1","title":"标题","detail":"详述"}}]}}'
-                    elif stype == 'discussion2':
-                        type_hint = '{{"type":"discussion1","items":[...]}},{{"type":"discussion2","left_title":"局限性","left_items":["..."],"right_title":"临床意义","right_items":["..."]}}'
                         if pages >= 2:
-                            type_hint = '第1页: {{"type":"discussion1","items":[...]}}, 第2页: {{"type":"discussion2","left_title":"局限性","left_items":["..."],"right_title":"未来方向","right_items":["..."]}}'
+                            type_hint = '[{{"type":"discussion1","title":"","items":[{{"number":"1","title":"","detail":""}}]}},{{"type":"discussion2","title":"","left_title":"局限性","left_items":[""],"right_title":"未来方向","right_items":[""]}}]'
+                        else:
+                            type_hint = '[{{"type":"discussion1","title":"","items":[{{"number":"1","title":"","detail":""}}]}}]'
                     else:
-                        type_hint = '{{"type":"result","title":"页标题","body":["要点1","要点2","要点3"],"images":[]}}'
+                        type_hint = '[{{"type":"result","title":"","body":["","",""],"images":[]}}]'
 
-                    content_prompt = f"""生成章节「{title}」的 {pages} 页内容。类型为 {stype}。
-返回 JSON 数组，格式: [{type_hint}]
+                    content_prompt = f"""为章节「{title}」生成恰好 {pages} 页内容。类型: {stype}。
+返回 JSON 数组，长度必须恰好为 {pages}，格式: {type_hint}
 
 论文关键发现:
 {guide}
