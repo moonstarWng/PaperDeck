@@ -348,16 +348,14 @@ def make_result_slide(prs, title, body_lines, img_specs, figs_dir='.'):
     title_bar(slide, title)
 
     lines = [l for l in body_lines if l.strip()]
-    n_lines = len(lines)
-    gap = 0.15               # 图片间距（英寸）
-    img_w = IMG_W             # 图片基准宽度
-    img_x = 0.3               # 图片左边缘
-    area_top = 1.1            # 可用区顶部
-    area_bot = 6.9            # 可用区底部（页脚以上留空隙）
+    n_lines = min(len(lines), 4)  # 最多 4 行
+    img_x = 0.3
+    area_top = 1.15
+    area_bot = 6.85
     area_h = area_bot - area_top
 
-    # ── 预加载图片，获取宽高比 ──
-    img_info = []  # [(path, aspect_ratio)]
+    # ── 预加载图片 ──
+    img_info = []
     for spec in img_specs:
         path = os.path.join(figs_dir, spec['file'])
         if os.path.exists(path):
@@ -365,72 +363,79 @@ def make_result_slide(prs, title, body_lines, img_specs, figs_dir='.'):
                 from PIL import Image
                 im = Image.open(path)
                 ratio = im.width / im.height
-                img_info.append((path, ratio, spec.get('top_in')))
+                img_info.append((path, ratio))
             except Exception:
-                img_info.append((path, 1.5, spec.get('top_in')))  # fallback ratio
+                img_info.append((path, 1.5))
         else:
-            img_info.append((path, 1.5, spec.get('top_in')))
+            img_info.append((path, 1.5))
 
     n_imgs = len(img_info)
-    if n_imgs == 0:
-        return slide
+    gap = 0.12  # 图片间距
 
-    # ── 检查是否有手动 top_in（兼容旧 JSON）──
-    has_manual = any(ti is not None for _, _, ti in img_info)
-
-    if has_manual:
-        # 手动模式：直接用提供的 top_in
-        for (path, ratio, top_in) in img_info:
-            P(slide, path, img_x, top_in if top_in else 1.1)
-    else:
-        # ── 动态模式：计算每张图在 img_w 下的实际高度 ──
-        raw_heights = [img_w / r for _, r, _ in img_info]
-        total_raw = sum(raw_heights) + (n_imgs - 1) * gap
-
-        if total_raw <= area_h:
-            # 全部放得下 → 全宽堆叠
-            final_heights = raw_heights
-            final_widths = [img_w] * n_imgs
+    # ── 图片区布局（约束规则）──
+    if n_imgs > 0:
+        if n_imgs <= 2:
+            # ≤2 图：垂直堆叠，每张不低于 2.0in 高
+            img_w = IMG_W
+            raw_heights = [img_w / r for _, r in img_info]
+            if sum(raw_heights) + gap <= area_h:
+                final_heights = raw_heights
+                final_widths = [img_w] * n_imgs
+            else:
+                # 等分但每张不低于 2.0
+                min_h = 2.0
+                per_h = (area_h - (n_imgs - 1) * gap) / n_imgs
+                final_heights = [max(min_h, per_h)] * n_imgs
+                final_widths = [min(img_w, h * r) for h, (_, r) in zip(final_heights, img_info)]
+            y = area_top
+            for i, (path, _) in enumerate(img_info):
+                P(slide, path, img_x, y, w=final_widths[i])
+                y += final_heights[i] + gap
+            img_end_y = y - gap
         else:
-            # 放不下 → 每张图分配均等高度
-            max_h = (area_h - (n_imgs - 1) * gap) / n_imgs
-            final_heights = [max_h] * n_imgs
-            final_widths = [min(img_w, max_h * r) for _, r, _ in img_info]  # 宽度自适应，不超过 IMG_W
+            # ≥3 图：2 列网格，每格不低于 1.3in
+            n_cols = 2
+            n_rows = (n_imgs + 1) // 2
+            cell_w = (IMG_W - gap) / n_cols
+            cell_h = min(2.2, (area_h - (n_rows - 1) * gap) / n_rows)
+            cell_h = max(1.3, cell_h)
+            for i, (path, ratio) in enumerate(img_info):
+                col = i % 2; row = i // 2
+                x = img_x + col * (cell_w + gap)
+                y = area_top + row * (cell_h + gap)
+                # 图片等比缩放到格子内，竖图(ratio<0.8)特殊处理
+                if ratio < 0.8:
+                    # 竖图：限高为格子的 80%，宽度自适应
+                    pic_h = cell_h * 0.8
+                    pic_w = min(cell_w, pic_h * ratio)
+                else:
+                    pic_w = cell_w
+                    pic_h = min(cell_h, cell_w / ratio)
+                pic = P(slide, path, x, y, w=pic_w)
+                if pic:
+                    pic.height = int(Inches(pic_h))
+            img_end_y = area_top + n_rows * cell_h + (n_rows - 1) * gap
 
-        # ── 堆叠图片 ──
-        y = area_top
-        for i, (path, ratio, _) in enumerate(img_info):
-            pw = final_widths[i]
-            ph = final_heights[i]
-            pic = P(slide, path, img_x, y, w=pw)
-            if pic and ph != raw_heights[i]:
-                # P() 已经设了宽度，需覆盖高度以匹配分配值
-                pic.height = int(Inches(ph))
-            y += ph + gap
-
-        img_end_y = y - gap  # 最后一张图底部
-
-    # ── 文字区：对齐图片区顶部，垂直居中 ──
-    text_x = 7.0
-    text_w = 5.8
-    if has_manual:
-        text_top = area_top
-        text_h = area_h
-    else:
-        text_top = area_top
+        # 文字区底对齐图片区底
         text_h = img_end_y - area_top
+    else:
+        text_h = area_h
+        img_end_y = area_top
 
-    # 计算文字行距，使文字在文字区内垂直居中
-    line_h = 1.0  # 每行占用 1.0in（宽松间距）
-    total_text_h = n_lines * line_h
-    if total_text_h < text_h:
-        text_top += (text_h - total_text_h) / 2  # 居中偏移
+    # ── 文字区（加宽、自适应行距、不再重叠）──
+    text_x = 6.8
+    text_w = 6.2
+    line_h = min(1.0, text_h / max(n_lines, 1))  # 行高自适应
+    line_h = max(0.55, line_h)  # 每行至少 0.55in
+    text_top = area_top + max(0, (text_h - n_lines * line_h) / 2)  # 垂直居中
 
-    for i, line in enumerate(lines):
+    for i, line in enumerate(lines[:4]):
         y = text_top + i * line_h
-        dot = slide.shapes.add_shape(9, Inches(text_x - 0.2), Inches(y + 0.15),
+        # 圆点标记
+        dot = slide.shapes.add_shape(9, Inches(text_x - 0.25), Inches(y + 0.12),
                                       Inches(0.18), Inches(0.18))
         dot.fill.solid(); dot.fill.fore_color.rgb = ACCENT_COLOR; dot.line.fill.background()
-        T(slide, text_x, y, text_w, 0.45, line)
+        # 正文（行高比文本框小 0.05 留 margin）
+        T(slide, text_x, y, text_w, line_h - 0.05, line)
 
     return slide

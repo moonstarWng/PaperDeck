@@ -56,7 +56,10 @@ def build_author_slide(prs, data):
     M(slide, 6.9, 1.8, 5.8, 1.5, institutions, sz=BODY_SIZE, color=DARK)
 
     # ── 底部通栏：通讯作者 + 前期基础 ──
-    R(slide, 0.4, 3.9, 12.5, 3.0, PALETTE_LIGHT, rounded=True)
+    prior_lines = len(prior_work) if prior_work else 0
+    author_bot_h = max(2.2, 1.2 + prior_lines * 0.5)
+    author_bot_h = min(5.0, author_bot_h)
+    R(slide, 0.4, 3.9, 12.5, author_bot_h, PALETTE_LIGHT, rounded=True)
     T(slide, 0.7, 4.0, 5.0, 0.4, '  通讯作者', sz=Pt(18), bold=True, color=PALETTE_PRIMARY)
     T(slide, 0.7, 4.5, 11.8, 0.4, authors, sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
     T(slide, 0.7, 5.1, 5.0, 0.4, '  课题组前期研究基础', sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
