@@ -241,10 +241,10 @@ def T(slide, l, t, w, h, text, sz=None, bold=False, color=None, align=PP_ALIGN.L
         sz = BODY_SIZE
     if color is None:
         color = BODY_COLOR
-    # 估算行数：中文约等宽，每字符宽≈sz_pt*0.014in, 行高≈sz_pt*0.022in
+    # 估算行数：中文在 Arial 下较宽，每字符≈sz_pt*0.020in, 行高≈sz_pt*0.025in
     font_in = sz / 12700
-    char_w_est = font_in * 0.014
-    line_h_est = font_in * 0.022
+    char_w_est = font_in * 0.020
+    line_h_est = font_in * 0.025
     est_lines = max(1, int(len(text) * char_w_est / max(w, 0.5)) + 1)
     actual_h = max(h, est_lines * line_h_est)
     tb = slide.shapes.add_textbox(Inches(l), Inches(t), Inches(w), Inches(actual_h))
@@ -262,7 +262,7 @@ def M(slide, l, t, w, h, lines, sz=None, color=None):
     if sz is None: sz = BODY_SIZE
     if color is None: color = BODY_COLOR
     n = max(1, len(lines))
-    line_h = sz / 12700 * 0.022 * 1.3  # 行高含间距
+    line_h = sz / 12700 * 0.025 * 1.3  # 行高含间距，中文在Arial下偏宽
     actual_h = max(h, n * line_h)
     tb = slide.shapes.add_textbox(Inches(l), Inches(t), Inches(w), Inches(actual_h))
     tf = tb.text_frame; tf.word_wrap = True

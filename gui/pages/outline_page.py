@@ -932,9 +932,26 @@ class OutlinePage(ctk.CTkFrame):
         self._safe_ui(lambda: self.status.configure(text="正在停止...", text_color="orange"))
 
     def _save_outline(self):
-        """保存当前大纲到用户选择的 .pdjson 文件。"""
+        """保存当前大纲（含论文元数据）到 .pdjson 文件。"""
         try:
-            json_str = self.editor.to_json()
+            import json as _json
+            # 打包大纲 + 论文信息
+            tree_json = self.editor.to_json()
+            tree_data = _json.loads(tree_json)
+            full = {
+                'meta': tree_data.get('meta', {}),
+                'slides': tree_data.get('slides', []),
+                'section_divider_edits': tree_data.get('section_divider_edits', []),
+                'paper_info': {
+                    'title': self.title_entry.get().strip(),
+                    'journal': self.journal_entry.get().strip(),
+                    'authors': self.author_entry.get().strip(),
+                },
+                'sections_config': self._get_section_config(),
+                'has_paper_info': self.paper_info_var.get(),
+            }
+            json_str = _json.dumps(full, indent=2, ensure_ascii=False)
+
             from tkinter import filedialog
             pdf_path = self.shared.get('pdf_path', '')
             init_dir = os.path.dirname(os.path.abspath(pdf_path)) if pdf_path else '.'
@@ -945,7 +962,7 @@ class OutlinePage(ctk.CTkFrame):
                 return
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(json_str)
-            # 同时保存到 process/ 供自动加载
+            # 同时保存到 process/
             proc_dir = os.path.join(os.path.dirname(os.path.abspath(path)), 'process')
             os.makedirs(proc_dir, exist_ok=True)
             with open(os.path.join(proc_dir, 'slide-content.json'), 'w', encoding='utf-8') as f:
@@ -956,12 +973,12 @@ class OutlinePage(ctk.CTkFrame):
             messagebox.showerror("保存失败", str(e))
 
     def _load_outline(self):
-        """从 .pdjson 文件加载大纲。"""
+        """从 .pdjson 文件加载大纲（含论文元数据）。"""
         try:
+            import json as _json
             from tkinter import filedialog
             pdf_path = self.shared.get('pdf_path', '')
             init_dir = os.path.dirname(os.path.abspath(pdf_path)) if pdf_path else '.'
-            # 优先检查 process/ 下是否有自动保存的
             proc_dir = os.path.join(init_dir, 'process')
             proc_file = os.path.join(proc_dir, 'slide-content.json')
             if os.path.exists(proc_file):
@@ -972,11 +989,34 @@ class OutlinePage(ctk.CTkFrame):
             if not path:
                 return
             with open(path, 'r', encoding='utf-8') as f:
-                content = f.read()
+                full = _json.load(f)
+
+            # 恢复论文元数据
+            paper = full.get('paper_info', {})
+            if paper.get('title'):
+                self.title_entry.delete(0, 'end'); self.title_entry.insert(0, paper['title'])
+            if paper.get('journal'):
+                self.journal_entry.delete(0, 'end'); self.journal_entry.insert(0, paper['journal'])
+            if paper.get('authors'):
+                self.author_entry.delete(0, 'end'); self.author_entry.insert(0, paper['authors'])
+            if full.get('has_paper_info') is not None:
+                self.paper_info_var.set(full['has_paper_info'])
+
+            # 恢复章节配置
+            if full.get('sections_config'):
+                for _, _, _, row in self.section_rows:
+                    row.destroy()
+                self.section_rows.clear()
+                for title, pages in full['sections_config']:
+                    self._add_section_row(title, str(pages), True)
+
+            # 恢复大纲内容
+            slides_str = _json.dumps({'slides': full.get('slides', []),
+                                       'section_divider_edits': full.get('section_divider_edits', [])})
             self.editor.set_figs_dir(self.shared.get('figs_dir', ''))
-            ok = self.editor.load_from_json(content)
+            ok = self.editor.load_from_json(slides_str)
             if ok:
-                self.shared['slide_content_json'] = content
+                self.shared['slide_content_json'] = _json.dumps(full)
                 self._set_state(self.STATE_READY)
                 self.status.configure(text="✓ 大纲已加载，可编辑后点击「构建 PPT」", text_color="green")
                 log_step('outline', f'大纲已加载 ← {path}')
