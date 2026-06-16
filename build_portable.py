@@ -97,6 +97,7 @@ def install_deps(pip_exe):
         "python-pptx",
         "pypdf",
         "pdfplumber",
+        "pypdfium2",
         "lxml",
         "Pillow",
         "requests",
