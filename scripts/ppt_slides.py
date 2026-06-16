@@ -86,15 +86,15 @@ def build_background_slide(prs, data):
     cards = data.get('cards', [])
     # 卡片等宽排列：每张 3.95in 宽，间距 0.27in
     for i, card in enumerate(cards):
-        cx = 0.45 + i * 4.22                     # 水平起始位置
-        color = parse_color(card.get('color', 'teal'))
-                body_lines = [l for l in card.get("body","").strip().split(chr(10)) if l.strip()]
+        cx = 0.45 + i * 4.22
+        color = parse_color(card.get("color", "teal"))
+        body_lines = [l for l in card.get("body","").strip().split(chr(10)) if l.strip()]
         card_h = max(2.8, 0.9 + len(body_lines) * 0.55)
         card_h = min(5.3, card_h)
         R(slide, cx, 1.15, 4.2, card_h, PALETTE_LIGHT, rounded=True)
-        R(slide, cx, 1.15, 3.95, 0.55, color)                    # 彩色标题条
-        T(slide, cx + 0.2, 1.2, 3.5, 0.45, card['title'], sz=Pt(20), bold=True, color=WHITE)
-        # body 中的 \n 换行符需要显式 split 后传入 M()
+        R(slide, cx, 1.15, 4.2, 0.55, color)
+        T(slide, cx + 0.2, 1.2, 3.8, 0.45, card["title"], sz=Pt(20), bold=True, color=WHITE)
+        M(slide, cx + 0.2, 1.85, 3.8, card_h - 0.9, body_lines, sz=BODY_SIZE, color=DARK)
         M(slide, cx + 0.25, 1.85, 3.4, 2.7,
            card['body'].strip().split('\n'), sz=BODY_SIZE, color=DARK)
 
