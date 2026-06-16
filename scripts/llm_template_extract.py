@@ -592,7 +592,7 @@ def extract_template_llm(input_path, output_path, base_url, api_key, model,
 
     # ── 持久化分析缓存 ──
     cache_path = os.path.join(_process_dir(input_path), 'analysis.json')
-    _save_analysis_cache(cache_path, slides_data, classifications, all_element_maps, prs)
+    _save_analysis_cache(cache_path, slides_data, classifications, {}, prs)
 
     # ── 保存 ──
     log(f"保存 → {output_path}")
@@ -602,7 +602,7 @@ def extract_template_llm(input_path, output_path, base_url, api_key, model,
     # ── 返回结果 ──
     return {
         'classifications': classifications,
-        'element_maps': all_element_maps,
+        'element_maps': {},
         'total_slides': total,
         'content_slides': content_slides,
     }
