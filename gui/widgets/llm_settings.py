@@ -17,6 +17,7 @@ class LLMSettingsWindow(ctk.CTkToplevel):
         self.title("LLM 参数设置")
         self.geometry("400x320")
         self.resizable(False, False)
+        self.configure(fg_color="#2B2D31")
         self.after(50, lambda: (self.lift(), self.focus_force()))
         self.after(150, lambda: (self.lift(), self.focus_force()))
 
