@@ -87,18 +87,20 @@ def build_background_slide(prs, data):
     title_bar(slide, '2 课题背景：从临床问题到科学机制')
 
     cards = data.get('cards', [])
-    # 卡片等宽排列：每张 3.95in 宽，间距 0.27in
+    n_cards = len(cards)
+    card_w = 5.8 if n_cards <= 2 else 3.95
+    gap_x = 0.3 if n_cards <= 2 else 0.27
     for i, card in enumerate(cards):
-        cx = 0.45 + i * 4.22
+        cx = 0.45 + i * (card_w + gap_x)
         color = parse_color(card.get("color", "teal"))
         body_lines = [l for l in card.get("body","").strip().split(chr(10)) if l.strip()]
         card_h = max(3.0, 1.1 + len(body_lines) * 0.7)
         card_h = min(5.5, card_h)
-        card_w = 4.5  # 加宽
         R(slide, cx, 1.15, card_w, card_h, PALETTE_LIGHT, rounded=True)
         R(slide, cx, 1.15, card_w, 0.55, color)
-        T(slide, cx + 0.2, 1.2, card_w - 0.5, 0.45, card["title"], sz=Pt(20), bold=True, color=WHITE)
-        M(slide, cx + 0.2, 1.85, card_w - 0.5, card_h - 0.9, body_lines, sz=BODY_SIZE, color=DARK)
+        font_sz = Pt(18) if n_cards >= 3 else Pt(20)
+        T(slide, cx + 0.15, 1.2, card_w - 0.35, 0.45, card["title"], sz=font_sz, bold=True, color=WHITE)
+        M(slide, cx + 0.15, 1.85, card_w - 0.35, card_h - 0.9, body_lines, sz=BODY_SIZE, color=DARK)
 
     # 底部假说/实验横幅
     hypothesis = data.get('hypothesis', '')

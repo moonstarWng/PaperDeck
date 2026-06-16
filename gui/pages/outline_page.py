@@ -411,9 +411,16 @@ class OutlinePage(ctk.CTkFrame):
             log_step('outline', f'  {label}: LLM 连续3次返回空，使用兜底占位')
             return ''  # 返回空字符串，由外层 _gen_section 兜底
 
+        total_est = 6 + len(td['sections'])  # 预估 LLM 调用次数
+        done_calls = [0]
+        def _progress(label=''):
+            done_calls[0] += 1
+            pct = min(95, done_calls[0] * 100 // total_est)
+            self._safe_ui(lambda: self.status.configure(text=f"{label} ({pct}%)", text_color="gray"))
+
         try:
             # ── Task 1: 论文分析 ──
-            self._safe_ui(lambda: self.status.configure(text="Task 1/4: 分析论文结构...", text_color="gray"))
+            _progress('Task 1/4: 分析论文...')
             analysis_prompt = f"""分析以下论文，提取关键信息。返回纯 JSON:
 {{
   "core_contribution": "一句话核心贡献",
@@ -430,7 +437,7 @@ class OutlinePage(ctk.CTkFrame):
             analysis = _json.loads(_ask("你是论文学术分析专家，提取论文核心信息。只返回 JSON。", analysis_prompt))
 
             # ── Task 2: 章节内容生成 ──
-            self._safe_ui(lambda: self.status.configure(text="Task 2/4: 生成章节内容...", text_color="gray"))
+            _progress('Task 2/4: 章节内容...')
             # 章节标题 → 内容类型映射
             # 长关键词优先匹配（如"结果总结"先匹配"总结"→summary）
             SECTION_TYPE_MAP = [
@@ -517,11 +524,11 @@ class OutlinePage(ctk.CTkFrame):
                         return result
                 pages = _gen_section(sec_title, sec_pages, guess_type)
                 all_results.append({'section': num, 'title': sec_title, 'pages': pages})
-                self._safe_ui(lambda i=sec_i: self.status.configure(
-                    text=f"Task 2/4: 章节 {i+1}/{len(td['sections'])} ({sec_title})", text_color="gray"))
+                n_sec = len(td['sections'])
+                _progress(f'Task 2/4: 章节 {sec_i+1}/{n_sec}')
 
             # ── Task 3: 图片分配 ──
-            self._safe_ui(lambda: self.status.configure(text="Task 3/4: 分配图片...", text_color="gray"))
+            _progress('Task 3/4: 分配图片...')
             if td['figs'].strip():
                 fig_list = td['figs']
                 result_titles = []
@@ -927,35 +934,45 @@ class OutlinePage(ctk.CTkFrame):
         self._safe_ui(lambda: self.status.configure(text="正在停止...", text_color="orange"))
 
     def _save_outline(self):
-        """保存当前大纲到 process/slide-content.json。"""
-        pdf_path = self.shared.get('pdf_path', '')
-        if not pdf_path:
-            messagebox.showerror("错误", "请先在配置页选择论文 PDF")
-            return
+        """保存当前大纲到用户选择的 .pdjson 文件。"""
         try:
             json_str = self.editor.to_json()
-            proc_dir = os.path.join(os.path.dirname(os.path.abspath(pdf_path)), 'process')
-            os.makedirs(proc_dir, exist_ok=True)
-            path = os.path.join(proc_dir, 'slide-content.json')
+            from tkinter import filedialog
+            pdf_path = self.shared.get('pdf_path', '')
+            init_dir = os.path.dirname(os.path.abspath(pdf_path)) if pdf_path else '.'
+            path = filedialog.asksaveasfilename(
+                title="保存大纲", initialdir=init_dir,
+                defaultextension=".pdjson", filetypes=[("PaperDeck JSON", "*.pdjson")])
+            if not path:
+                return
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(json_str)
-            self.status.configure(text=f"✓ 大纲已保存 → {path}", text_color="green")
-            log_step('outline', f'大纲已保存')
+            # 同时保存到 process/ 供自动加载
+            proc_dir = os.path.join(os.path.dirname(os.path.abspath(path)), 'process')
+            os.makedirs(proc_dir, exist_ok=True)
+            with open(os.path.join(proc_dir, 'slide-content.json'), 'w', encoding='utf-8') as f:
+                f.write(json_str)
+            self.status.configure(text=f"✓ 大纲已保存", text_color="green")
+            log_step('outline', f'大纲已保存 → {path}')
         except Exception as e:
             messagebox.showerror("保存失败", str(e))
 
     def _load_outline(self):
-        """从 process/slide-content.json 加载大纲。"""
-        pdf_path = self.shared.get('pdf_path', '')
-        if not pdf_path:
-            messagebox.showerror("错误", "请先在配置页选择论文 PDF")
-            return
-        proc_dir = os.path.join(os.path.dirname(os.path.abspath(pdf_path)), 'process')
-        path = os.path.join(proc_dir, 'slide-content.json')
-        if not os.path.exists(path):
-            messagebox.showerror("错误", f"未找到已保存的大纲:\n{path}")
-            return
+        """从 .pdjson 文件加载大纲。"""
         try:
+            from tkinter import filedialog
+            pdf_path = self.shared.get('pdf_path', '')
+            init_dir = os.path.dirname(os.path.abspath(pdf_path)) if pdf_path else '.'
+            # 优先检查 process/ 下是否有自动保存的
+            proc_dir = os.path.join(init_dir, 'process')
+            proc_file = os.path.join(proc_dir, 'slide-content.json')
+            if os.path.exists(proc_file):
+                init_dir = proc_dir
+            path = filedialog.askopenfilename(
+                title="加载大纲", initialdir=init_dir,
+                filetypes=[("PaperDeck JSON", "*.pdjson"), ("JSON", "*.json"), ("All", "*.*")])
+            if not path:
+                return
             with open(path, 'r', encoding='utf-8') as f:
                 content = f.read()
             self.editor.set_figs_dir(self.shared.get('figs_dir', ''))
@@ -964,7 +981,7 @@ class OutlinePage(ctk.CTkFrame):
                 self.shared['slide_content_json'] = content
                 self._set_state(self.STATE_READY)
                 self.status.configure(text="✓ 大纲已加载，可编辑后点击「构建 PPT」", text_color="green")
-                log_step('outline', '大纲已加载')
+                log_step('outline', f'大纲已加载 ← {path}')
             else:
                 messagebox.showerror("加载失败", "JSON 解析失败")
         except Exception as e:
