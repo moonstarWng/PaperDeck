@@ -401,12 +401,16 @@ class OutlinePage(ctk.CTkFrame):
             for sec_i, sec in enumerate(all_results):
                 num = f"0{sec_i+1}"
                 section_divider_edits.append({"number": num, "title": sec['title']})
-                # 第一个 section 后插入 paper_info
                 if sec_i == 0 and td['has_paper_info']:
                     slides.append({"type": "paper_info", "pdf_path": self.shared.get('pdf_path', ''),
                                    "paper_title": td['title'], "extra_text": ""})
                 slides.append({"type": "keep", "ref": "section", "index": sec_i})
                 for p in sec['pages']:
+                    # 统一 images 格式: ["1A.jpg"] → [{"file": "1A.jpg"}]
+                    if 'images' in p:
+                        imgs = p['images']
+                        if imgs and isinstance(imgs[0], str):
+                            p['images'] = [{"file": f} for f in imgs]
                     slides.append(p)
             slides.append({"type": "keep", "ref": "thanks"})
 
