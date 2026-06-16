@@ -95,8 +95,6 @@ def build_background_slide(prs, data):
         R(slide, cx, 1.15, 4.2, 0.55, color)
         T(slide, cx + 0.2, 1.2, 3.8, 0.45, card["title"], sz=Pt(20), bold=True, color=WHITE)
         M(slide, cx + 0.2, 1.85, 3.8, card_h - 0.9, body_lines, sz=BODY_SIZE, color=DARK)
-        M(slide, cx + 0.25, 1.85, 3.4, 2.7,
-           card['body'].strip().split('\n'), sz=BODY_SIZE, color=DARK)
 
     # 底部假说/实验横幅
     hypothesis = data.get('hypothesis', '')
@@ -133,20 +131,26 @@ def build_summary_slide(prs, data):
     flow_steps = data.get('flow_steps', [])
     n = len(flow_steps)
     if n > 0:
-        # 自适应宽度：总可用宽度 12.5in，减去箭头间距
-        bw = max(1.0, (12.5 - (n - 1) * 0.08) / n)  # 每步宽度不低于 1.0in
-        bw = min(bw, 1.8)                              # 每步宽度不超过 1.8in
-        x0 = (13.33 - (n * (bw + 0.08) - 0.08)) / 2   # 居中起始位置
-        bh = 0.95
-        for i, step in enumerate(flow_steps):
-            x = x0 + i * (bw + 0.08)
-            color = parse_color(step.get('color', 'teal'))
-            R(slide, x, 1.2, bw, bh, color, rounded=True)
-            T(slide, x + 0.06, 1.28, bw - 0.12, bh - 0.16, step['text'],
-               sz=Pt(11), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
-            # 步骤之间添加右箭头符号
-            if i < n - 1:
-                T(slide, x + bw + 0.005, 1.4, 0.1, 0.4, '→', sz=Pt(22), bold=True, color=PALETTE_PRIMARY, align=PP_ALIGN.CENTER)
+        # 超过5个步骤时分为两行
+        max_cols = 5
+        n_rows = (n + max_cols - 1) // max_cols
+        per_row = min(n, max_cols)
+        for row in range(n_rows):
+            row_steps = flow_steps[row * per_row : (row + 1) * per_row]
+            rn = len(row_steps)
+            bw = max(1.2, (12.5 - (rn - 1) * 0.08) / rn)
+            bw = min(bw, 2.2)
+            x0 = (13.33 - (rn * (bw + 0.08) - 0.08)) / 2
+            bh = 0.8
+            base_y = 1.2 + row * 1.0
+            for i, step in enumerate(row_steps):
+                x = x0 + i * (bw + 0.08)
+                color = parse_color(step.get('color', 'teal'))
+                R(slide, x, base_y, bw, bh, color, rounded=True)
+                T(slide, x + 0.04, base_y + 0.06, bw - 0.08, bh - 0.12, step['text'],
+                   sz=Pt(10), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+                if i < rn - 1:
+                    T(slide, x + bw + 0.005, base_y + 0.2, 0.1, 0.3, '→', sz=Pt(16), bold=True, color=PALETTE_PRIMARY, align=PP_ALIGN.CENTER)
 
     # ── 中部证据卡片 ──
     evidence_cards = data.get('evidence_cards', [])
