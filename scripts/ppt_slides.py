@@ -88,7 +88,10 @@ def build_background_slide(prs, data):
     for i, card in enumerate(cards):
         cx = 0.45 + i * 4.22                     # 水平起始位置
         color = parse_color(card.get('color', 'teal'))
-        R(slide, cx, 1.15, 3.95, 3.6, PALETTE_LIGHT, rounded=True)  # 卡片背景
+                body_lines = [l for l in card.get("body","").strip().split(chr(10)) if l.strip()]
+        card_h = max(2.8, 0.9 + len(body_lines) * 0.55)
+        card_h = min(5.3, card_h)
+        R(slide, cx, 1.15, 4.2, card_h, PALETTE_LIGHT, rounded=True)
         R(slide, cx, 1.15, 3.95, 0.55, color)                    # 彩色标题条
         T(slide, cx + 0.2, 1.2, 3.5, 0.45, card['title'], sz=Pt(20), bold=True, color=WHITE)
         # body 中的 \n 换行符需要显式 split 后传入 M()
@@ -152,7 +155,7 @@ def build_summary_slide(prs, data):
         cw = min(3.95, (12.5 - (nc - 1) * 0.1) / nc)
         for i, card in enumerate(evidence_cards):
             cx = 0.45 + i * (cw + 0.1)
-            R(slide, cx, 2.55, cw, 1.35, PALETTE_LIGHT, rounded=True)
+            R(slide, cx, 2.55, cw, 1.7, PALETTE_LIGHT, rounded=True)
             T(slide, cx + 0.2, 2.65, cw - 0.4, 0.35, card['title'], sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
             T(slide, cx + 0.2, 3.05, cw - 0.4, 0.7, card['detail'], sz=BODY_SIZE, color=DARK)
 
