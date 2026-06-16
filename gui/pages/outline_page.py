@@ -313,7 +313,8 @@ class OutlinePage(ctk.CTkFrame):
         """Task 流水线: 分析→规划→内容→组装。"""
         import time
         t_start = time.time()
-        log_step('outline', f'任务流水线开始 ({len(td[\"sections\"])} 章节)')
+        n_sec = len(td['sections'])
+        log_step('outline', f'任务流水线开始 ({n_sec} 章节)')
         api_url = self.shared['api_base_url']
         api_key = self.shared['api_key']
         model = self.shared['api_model']
