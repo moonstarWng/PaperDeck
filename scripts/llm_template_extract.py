@@ -554,57 +554,15 @@ def extract_template_llm(input_path, output_path, base_url, api_key, model,
             classifications[i] = 'CONTENT'
     log(f"分类结果: {json.dumps(classifications, ensure_ascii=False)}")
 
-    # ── Step 3: 元素识别（仅 CONTENT 页用 LLM）──
+    # ── Step 3: 规则替换（不调 LLM，全部文本和图片直接替换）──
     content_slides = [i for i, t in classifications.items() if t == 'CONTENT']
-    log(f"内容页: {len(content_slides)} 页，逐页 LLM 识别元素...")
+    log(f"内容页: {len(content_slides)} 页，规则替换...")
 
-    headers = {'Content-Type': 'application/json'}
-    if api_key:
-        headers['Authorization'] = f'Bearer {api_key}'
-
-    all_element_maps = {}
-    for idx in content_slides:
-        prompt = build_element_prompt(slides_data[idx])
-        resp = requests.post(
-            f'{base_url}/v1/chat/completions',
-            headers=headers,
-            json={
-                'model': model,
-                'messages': [
-                    {'role': 'system', 'content': ELEMENT_SYSTEM},
-                    {'role': 'user', 'content': prompt},
-                ],
-                'temperature': 0.0,
-            },
-            timeout=60,
-        )
-        resp.raise_for_status()
-        content_text = resp.json()['choices'][0]['message']['content']
-        element_map = parse_element_response(content_text)
-        all_element_maps[idx] = element_map
-        title_count = sum(1 for v in element_map.values() if v == 'title')
-        body_count = sum(1 for v in element_map.values() if v == 'body')
-        img_count = sum(1 for v in element_map.values() if v == 'image')
-        deco_count = sum(1 for v in element_map.values() if v == 'decoration')
-        log(f"  Slide {idx}: {title_count} title, {body_count} body, "
-            f"{img_count} image, {deco_count} decoration")
-
-    # ── Step 4: 替换（CONTENT 页 LLM + 兜底替换所有文本和图片）──
-    log("替换内容为占位符...")
     from pptx.dml.color import RGBColor
     gray = RGBColor(*PLACEHOLDER_COLOR)
-
-    # 对每个内容页：先用 LLM 结果，再兜底处理未被识别的文本和图片
     for idx in content_slides:
         slide = prs.slides[idx]
-        element_map = all_element_maps.get(idx, {})
-        # 先应用 LLM 识别的元素
-        if element_map:
-            apply_placeholders(prs, idx, element_map)
-        # 兜底：未被 LLM 覆盖的形状，有文字→"此处填充文本"，是图片→灰色占位
-        for si, shape in enumerate(slide.shapes):
-            if si in element_map:
-                continue  # 已被 LLM 处理
+        for shape in list(slide.shapes):
             if 'PICTURE' in str(shape.shape_type):
                 l, t, w, h = shape.left, shape.top, shape.width, shape.height
                 shape._element.getparent().remove(shape._element)
@@ -615,21 +573,17 @@ def extract_template_llm(input_path, output_path, base_url, api_key, model,
                 p = tf.paragraphs[0]; p.alignment = 1
                 r = p.add_run(); r.text = '此处填充图片'; r.font.size = Pt(14); r.font.color.rgb = gray
             elif shape.has_text_frame and shape.text_frame.text.strip():
-                role = element_map.get(si, '')
-                if role not in ('title', 'body', 'decoration'):
-                    # 未被识别的文本 → 只改文字，保留原始字体
-                    for para in shape.text_frame.paragraphs:
-                        for run in para.runs:
-                            if run.text.strip():
-                                run.text = '此处填充文本'
+                for para in shape.text_frame.paragraphs:
+                    for run in para.runs:
+                        if run.text.strip():
+                            run.text = '此处填充文本'
 
     # 删除非内容页的所有图片
     for i in range(total):
         if i not in content_slides:
-            slide = prs.slides[i]
-            to_remove = [s for s in slide.shapes if 'PICTURE' in str(s.shape_type)]
-            for s in to_remove:
-                s._element.getparent().remove(s._element)
+            for s in list(prs.slides[i].shapes):
+                if 'PICTURE' in str(s.shape_type):
+                    s._element.getparent().remove(s._element)
 
     # 通用化非内容页文字
     log("通用化模板文字...")
