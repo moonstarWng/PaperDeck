@@ -326,7 +326,7 @@ class OutlinePage(ctk.CTkFrame):
             t0 = time.time()
             headers = {'Content-Type': 'application/json'}
             if api_key: headers['Authorization'] = f'Bearer {api_key}'
-            for attempt in range(3):
+            for attempt in range(2):  # 最多2次尝试
                 resp = requests.post(f'{api_url.rstrip("/")}/chat/completions', headers=headers,
                     json={'model': model, 'temperature': temp,
                           'messages': [{'role': 'system', 'content': system_prompt},
@@ -340,9 +340,8 @@ class OutlinePage(ctk.CTkFrame):
                     total_tokens += pt + ct
                     log_step('llm', f'  {label}: {time.time()-t0:.1f}s | {pt}in+{ct}out')
                     return content
-                log_step('llm', f'  {label}: 空响应，重试 {attempt+1}/3...')
-                temp += 0.1  # 稍微提高温度增加多样性
-            raise RuntimeError(f'{label}: LLM 返回空响应，重试3次仍失败')
+                log_step('llm', f'  {label}: 空响应，重试 {attempt+1}/2...')
+            return ''  # 返回空字符串，由外层 _gen_section 兜底
 
         try:
             # ── Task 1: 论文分析 ──
@@ -419,7 +418,7 @@ class OutlinePage(ctk.CTkFrame):
                     except Exception:
                         if retry < 2:
                             log_step('outline', f'  章节{num}重试 {retry+1}/2')
-                            return _gen_section(title, max(pages, 1), retry+1)
+                            return _gen_section(title, max(pages, 1), stype, retry+1)
                         return [{"type":"result","title":f"{title}","body":["要点一","要点二","要点三"],"images":[]}]
 
                 pages = _gen_section(sec_title, sec_pages, guess_type)
