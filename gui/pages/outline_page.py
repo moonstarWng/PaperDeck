@@ -45,6 +45,10 @@ class OutlinePage(ctk.CTkFrame):
         self.optimize_cb.pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="⚙", width=30, fg_color="#555555",
                        command=self._open_llm_settings).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="💾", width=30, fg_color="#555555",
+                       command=self._save_outline).pack(side="left", padx=2)
+        ctk.CTkButton(btn_frame, text="📂", width=30, fg_color="#555555",
+                       command=self._load_outline).pack(side="left", padx=2)
         ctk.CTkButton(btn_frame, text="构建 PPT →", width=100, fg_color="green",
                        command=self._go_build).pack(side="right", padx=5)
 
@@ -921,6 +925,50 @@ class OutlinePage(ctk.CTkFrame):
     def _stop_generation(self):
         self._stop_flag = True
         self._safe_ui(lambda: self.status.configure(text="正在停止...", text_color="orange"))
+
+    def _save_outline(self):
+        """保存当前大纲到 process/slide-content.json。"""
+        pdf_path = self.shared.get('pdf_path', '')
+        if not pdf_path:
+            messagebox.showerror("错误", "请先在配置页选择论文 PDF")
+            return
+        try:
+            json_str = self.editor.to_json()
+            proc_dir = os.path.join(os.path.dirname(os.path.abspath(pdf_path)), 'process')
+            os.makedirs(proc_dir, exist_ok=True)
+            path = os.path.join(proc_dir, 'slide-content.json')
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(json_str)
+            self.status.configure(text=f"✓ 大纲已保存 → {path}", text_color="green")
+            log_step('outline', f'大纲已保存')
+        except Exception as e:
+            messagebox.showerror("保存失败", str(e))
+
+    def _load_outline(self):
+        """从 process/slide-content.json 加载大纲。"""
+        pdf_path = self.shared.get('pdf_path', '')
+        if not pdf_path:
+            messagebox.showerror("错误", "请先在配置页选择论文 PDF")
+            return
+        proc_dir = os.path.join(os.path.dirname(os.path.abspath(pdf_path)), 'process')
+        path = os.path.join(proc_dir, 'slide-content.json')
+        if not os.path.exists(path):
+            messagebox.showerror("错误", f"未找到已保存的大纲:\n{path}")
+            return
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            self.editor.set_figs_dir(self.shared.get('figs_dir', ''))
+            ok = self.editor.load_from_json(content)
+            if ok:
+                self.shared['slide_content_json'] = content
+                self._set_state(self.STATE_READY)
+                self.status.configure(text="✓ 大纲已加载，可编辑后点击「构建 PPT」", text_color="green")
+                log_step('outline', '大纲已加载')
+            else:
+                messagebox.showerror("加载失败", "JSON 解析失败")
+        except Exception as e:
+            messagebox.showerror("加载失败", str(e))
 
     def _open_llm_settings(self):
         from gui.widgets.llm_settings import LLMSettingsWindow

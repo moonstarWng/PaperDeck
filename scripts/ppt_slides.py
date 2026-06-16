@@ -92,12 +92,13 @@ def build_background_slide(prs, data):
         cx = 0.45 + i * 4.22
         color = parse_color(card.get("color", "teal"))
         body_lines = [l for l in card.get("body","").strip().split(chr(10)) if l.strip()]
-        card_h = max(2.8, 1.1 + len(body_lines) * 0.65)
-        card_h = min(5.3, card_h)
-        R(slide, cx, 1.15, 4.2, card_h, PALETTE_LIGHT, rounded=True)
-        R(slide, cx, 1.15, 4.2, 0.55, color)
-        T(slide, cx + 0.2, 1.2, 3.8, 0.45, card["title"], sz=Pt(20), bold=True, color=WHITE)
-        M(slide, cx + 0.2, 1.85, 3.8, card_h - 0.9, body_lines, sz=BODY_SIZE, color=DARK)
+        card_h = max(3.0, 1.1 + len(body_lines) * 0.7)
+        card_h = min(5.5, card_h)
+        card_w = 4.5  # 加宽
+        R(slide, cx, 1.15, card_w, card_h, PALETTE_LIGHT, rounded=True)
+        R(slide, cx, 1.15, card_w, 0.55, color)
+        T(slide, cx + 0.2, 1.2, card_w - 0.5, 0.45, card["title"], sz=Pt(20), bold=True, color=WHITE)
+        M(slide, cx + 0.2, 1.85, card_w - 0.5, card_h - 0.9, body_lines, sz=BODY_SIZE, color=DARK)
 
     # 底部假说/实验横幅
     hypothesis = data.get('hypothesis', '')
