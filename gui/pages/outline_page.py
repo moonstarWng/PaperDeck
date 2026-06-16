@@ -365,15 +365,16 @@ class OutlinePage(ctk.CTkFrame):
             # ── Task 2: 章节内容生成 ──
             self._safe_ui(lambda: self.status.configure(text="Task 2/4: 生成章节内容...", text_color="gray"))
             # 章节标题 → 内容类型映射
-            SECTION_TYPE_MAP = {
-                '作者': 'author', '团队': 'author',
-                '背景': 'background', '课题': 'background',
-                '结果分析': 'result', '结果': 'result',
-                '总结': 'summary', '结论': 'summary',
-                '讨论': 'discussion1', '分析': 'discussion1',
-            }
+            # 长关键词优先匹配（如"结果总结"先匹配"总结"→summary）
+            SECTION_TYPE_MAP = [
+                ('结果总结', 'summary'), ('结论', 'summary'),
+                ('结果分析', 'result'), ('结果', 'result'),
+                ('作者', 'author'), ('团队', 'author'),
+                ('背景', 'background'), ('课题', 'background'),
+                ('讨论', 'discussion1'), ('分析', 'discussion1'),
+            ]
             def _guess_type(title):
-                for keyword, stype in SECTION_TYPE_MAP.items():
+                for keyword, stype in SECTION_TYPE_MAP:
                     if keyword in title:
                         return stype
                 return 'result'
@@ -422,7 +423,7 @@ class OutlinePage(ctk.CTkFrame):
                             return _gen_section(title, max(pages, 1), retry+1)
                         return [{"type":"result","title":f"{title}","body":["要点一","要点二","要点三"],"images":[]}]
 
-                pages = _gen_section(sec_title, sec_pages)
+                pages = _gen_section(sec_title, sec_pages, guess_type)
                 all_results.append({'section': num, 'title': sec_title, 'pages': pages})
                 self._safe_ui(lambda i=sec_i: self.status.configure(
                     text=f"Task 2/4: 章节 {i+1}/{len(td['sections'])} ({sec_title})", text_color="gray"))
