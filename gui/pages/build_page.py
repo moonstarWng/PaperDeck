@@ -135,6 +135,7 @@ class BuildPage(ctk.CTkFrame):
         tmp.close()
 
         self.output_path = output_path
+        log_step('build', f'开始构建 → {output_path}')
         self._log(f"[开始] 输出 → {output_path}")
         self.build_btn.configure(state="disabled")
         self.status.configure(text="构建中...", text_color="gray")
@@ -142,6 +143,8 @@ class BuildPage(ctk.CTkFrame):
 
     def _do_build(self, json_path):
         """在后台线程中执行构建。"""
+        import time
+        t0 = time.time()
         try:
             self._log("[验证] 检查并修复 JSON...")
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'scripts'))
@@ -162,6 +165,8 @@ class BuildPage(ctk.CTkFrame):
             config = load_json(json_path)
             output = build(config, json_path)
             self.output_path = output
+            elapsed = time.time() - t0
+            log_step('build', f'构建完成 ({elapsed:.1f}s) → {output}')
             self._log(f"[完成] ✓ {output}")
             self.status.configure(text=f"✓ 构建完成 → {output}", text_color="green")
         except Exception as e:

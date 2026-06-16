@@ -294,6 +294,9 @@ class ConfigPage(ctk.CTkFrame):
         threading.Thread(target=self._do_test_api, args=(url, key, model), daemon=True).start()
 
     def _do_test_api(self, url, key, model):
+        import time
+        t0 = time.time()
+        log_step('config', f'API 连接测试 {model} @ {url}')
         try:
             import requests
             resp = requests.post(f"{url.rstrip('/')}/chat/completions",
@@ -301,10 +304,14 @@ class ConfigPage(ctk.CTkFrame):
                 json={"model": model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5},
                 timeout=15)
             if resp.status_code == 200:
+                elapsed = time.time() - t0
+                log_step('config', f'API 连接成功 ({elapsed:.1f}s)')
                 self.api_status.configure(text="✓ 连接成功", text_color="green")
             else:
+                log_step('config', f'API 连接失败 HTTP {resp.status_code}')
                 self.api_status.configure(text=f"✗ HTTP {resp.status_code}: {resp.text[:80]}", text_color="red")
         except Exception as e:
+            log_step('config', f'API 连接失败: {e}')
             self.api_status.configure(text=f"✗ 连接失败: {str(e)[:80]}", text_color="red")
 
     # ── 验证并跳转 ──
@@ -364,6 +371,7 @@ class ConfigPage(ctk.CTkFrame):
     # ── 提取模板按钮 ──
     def _run_extract_template(self):
         """用户点击「提取模板骨架」按钮后，在后台线程中提取。"""
+        log_step('config', f'开始提取模板 ({self.extract_mode.get()} 模式)')
         self.extract_btn.configure(state="disabled", text="提取中...")
         self.extract_progress.configure(text="准备中...", text_color="gray")
         self.next_btn.configure(state="disabled")

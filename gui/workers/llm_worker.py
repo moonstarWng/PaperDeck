@@ -61,23 +61,16 @@ def build_system_prompt():
 def call_llm(base_url, api_key, model, user_prompt, on_progress=None):
     """
     调用 OpenAI 兼容 API 生成内容。
-
-    参数:
-      base_url: API 端点
-      api_key: 认证密钥
-      model: 模型名称
-      user_prompt: 用户提示词（论文全文 + 图片列表）
-      on_progress: 进度回调 (message: str) -> None
-
-    返回:
-      str: LLM 返回的 JSON 字符串
-    异常:
-      requests.RequestException: 网络错误
-      ValueError: JSON 解析失败
+    返回: str: LLM 返回的 JSON 字符串
     """
+    import time
+    t0 = time.time()
     if on_progress:
         on_progress("正在连接 LLM API...")
     log_step('llm', f'调用 {model} @ {base_url}')
+    # 估算输入 token（中文约 1 char ≈ 1.5 token）
+    input_chars = len(user_prompt)
+    log_step('llm', f'  输入约 {input_chars} 字符')
     system_prompt = build_system_prompt()
 
     resp = requests.post(
@@ -102,6 +95,14 @@ def call_llm(base_url, api_key, model, user_prompt, on_progress=None):
         on_progress("正在解析响应...")
     data = resp.json()
     content = data["choices"][0]["message"]["content"]
+
+    # 耗时和 token 统计
+    elapsed = time.time() - t0
+    usage = data.get('usage', {})
+    prompt_tokens = usage.get('prompt_tokens', 0)
+    completion_tokens = usage.get('completion_tokens', 0)
+    total_tokens = usage.get('total_tokens', prompt_tokens + completion_tokens)
+    log_step('llm', f'  完成: {elapsed:.1f}s | tokens: {prompt_tokens}in + {completion_tokens}out = {total_tokens}')
 
     # 尝试从响应中提取 JSON（LLM 可能在前后加了说明文字）
     content = _extract_json(content)

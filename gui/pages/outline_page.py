@@ -311,13 +311,18 @@ class OutlinePage(ctk.CTkFrame):
 
     def _do_task_pipeline(self, td):
         """Task 流水线: 分析→规划→内容→组装。"""
+        import time
+        t_start = time.time()
+        log_step('outline', f'任务流水线开始 ({len(td[\"sections\"])} 章节)')
         api_url = self.shared['api_base_url']
         api_key = self.shared['api_key']
         model = self.shared['api_model']
-        N = 3 if td['optimize'] else 1
+        total_tokens = 0
 
         import requests, json as _json
-        def _ask(system_prompt, user_prompt, temp=0.3):
+        def _ask(system_prompt, user_prompt, label='', temp=0.3):
+            nonlocal total_tokens
+            t0 = time.time()
             headers = {'Content-Type': 'application/json'}
             if api_key: headers['Authorization'] = f'Bearer {api_key}'
             resp = requests.post(f'{api_url.rstrip("/")}/chat/completions', headers=headers,
@@ -325,7 +330,12 @@ class OutlinePage(ctk.CTkFrame):
                       'messages': [{'role': 'system', 'content': system_prompt},
                                    {'role': 'user', 'content': user_prompt}]}, timeout=120)
             resp.raise_for_status()
-            return resp.json()['choices'][0]['message']['content']
+            data = resp.json()
+            usage = data.get('usage', {})
+            pt = usage.get('prompt_tokens', 0); ct = usage.get('completion_tokens', 0)
+            total_tokens += pt + ct
+            log_step('llm', f'  {label}: {time.time()-t0:.1f}s | {pt}in+{ct}out')
+            return data['choices'][0]['message']['content']
 
         try:
             # ── Task 1: 论文分析 ──
@@ -425,6 +435,8 @@ class OutlinePage(ctk.CTkFrame):
             }
             result = _json.dumps(full_config, indent=2, ensure_ascii=False)
             self.shared['slide_content_json'] = result
+            elapsed = time.time() - t_start
+            log_step('outline', f'任务流水线完成: {elapsed:.1f}s | 总 tokens: {total_tokens}')
             self._safe_ui(lambda: self._load_llm_result(result))
         except Exception as e:
             import traceback
