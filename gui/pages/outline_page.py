@@ -41,8 +41,8 @@ class OutlinePage(ctk.CTkFrame):
         self.stop_btn = ctk.CTkButton(btn_frame, text="■ 停止", width=60, fg_color="#D94F4F",
                                        command=self._stop_generation)
         self.optimize_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(btn_frame, text="多轮优选", variable=self.optimize_var,
-                         width=80).pack(side="left", padx=5)
+        self.optimize_cb = ctk.CTkCheckBox(btn_frame, text="多轮优选", variable=self.optimize_var, width=80)
+        self.optimize_cb.pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="⚙", width=30, fg_color="#555555",
                        command=self._open_llm_settings).pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="构建 PPT →", width=100, fg_color="green",
@@ -915,7 +915,7 @@ class OutlinePage(ctk.CTkFrame):
         elif state == self.STATE_GENERATING:
             self.read_btn.configure(state="disabled")
             self.gen_btn.configure(state="disabled")
-            self.stop_btn.pack(side="left", padx=5, before=self.optimize_var)
+            self.stop_btn.pack(side="left", padx=5, before=self.optimize_cb)
 
     def _stop_generation(self):
         self._stop_flag = True
