@@ -440,24 +440,93 @@ class OutlinePage(ctk.CTkFrame):
             return versions[0]  # 解析失败则用第一个
 
     def _load_llm_result(self, result):
-        """在主线程加载 LLM 结果到编辑器。"""
+        """在主线程加载 LLM 结果，解析失败则自动修复重试。"""
         self.editor.set_figs_dir(self.shared.get('figs_dir', ''))
-        # 保存原始输出到 process 目录
+        # 保存原始输出
         pdf_path = self.shared.get('pdf_path', '')
         if pdf_path:
             proc_dir = os.path.join(os.path.dirname(os.path.abspath(pdf_path)), 'process')
             os.makedirs(proc_dir, exist_ok=True)
-            raw_path = os.path.join(proc_dir, 'slide-content-raw.json')
-            try:
-                with open(raw_path, 'w', encoding='utf-8') as f:
-                    f.write(result)
-            except Exception:
-                pass
+            with open(os.path.join(proc_dir, 'slide-content-raw.json'), 'w', encoding='utf-8') as f:
+                f.write(result)
+
         ok = self.editor.load_from_json(result)
         if ok:
             self.status.configure(text="✓ 大纲已生成，可展开编辑后点击「构建 PPT」", text_color="green")
         else:
-            self.status.configure(text="大纲生成完成但解析失败，请检查 JSON 格式", text_color="orange")
+            # 自动修复
+            self.status.configure(text="JSON 解析失败，自动修复中...", text_color="orange")
+            threading.Thread(target=self._repair_json_loop, args=(result, 0), daemon=True).start()
+
+    def _repair_json_loop(self, broken_json, attempt):
+        """LLM 修复 JSON 循环，最多 3 次。"""
+        if attempt >= 3:
+            self._safe_ui(lambda: self.status.configure(
+                text="大纲生成失败：JSON 无法修复，请检查 LLM 输出", text_color="red"))
+            return
+
+        self._safe_ui(lambda: self.status.configure(
+            text=f"JSON 修复中 ({attempt+1}/3)...", text_color="orange"))
+
+        try:
+            import requests, json as _json
+            # 提取错误信息
+            error_msg = ''
+            try:
+                _json.loads(broken_json)
+                error_msg = 'unknown error'
+            except _json.JSONDecodeError as e:
+                error_msg = str(e)
+
+            repair_prompt = f"""以下 JSON 解析失败，错误: {error_msg}
+
+请修复 JSON 语法错误（如尾随逗号、未闭合括号、非法字符等），不要修改内容、结构和逻辑。
+只返回修复后的合法 JSON，不要包裹在 ```json``` 中，不要有任何解释。
+
+原始 JSON:
+{broken_json[:8000]}"""
+
+            api_url = self.shared['api_base_url']
+            api_key = self.shared['api_key']
+            model = self.shared['api_model']
+            headers = {'Content-Type': 'application/json'}
+            if api_key:
+                headers['Authorization'] = f'Bearer {api_key}'
+            resp = requests.post(
+                f'{api_url.rstrip("/")}/chat/completions',
+                headers=headers,
+                json={'model': model, 'temperature': 0.0,
+                      'messages': [{'role': 'user', 'content': repair_prompt}]},
+                timeout=60)
+            resp.raise_for_status()
+            repaired = resp.json()['choices'][0]['message']['content']
+
+            # 用 repair_and_validate 再次校验
+            from scripts.validate_outline import repair_and_validate
+            rule_fixed, warnings = repair_and_validate(repaired)
+            if rule_fixed is None:
+                repaired = repaired  # keep LLM version
+            else:
+                repaired = rule_fixed
+
+            # 保存修复后的版本
+            pdf_path = self.shared.get('pdf_path', '')
+            if pdf_path:
+                proc_dir = os.path.join(os.path.dirname(os.path.abspath(pdf_path)), 'process')
+                with open(os.path.join(proc_dir, f'slide-content-repair{attempt+1}.json'), 'w', encoding='utf-8') as f:
+                    f.write(repaired)
+
+            ok = self.editor.load_from_json(repaired)
+            if ok:
+                self._safe_ui(lambda: self.status.configure(
+                    text=f"✓ 大纲已生成 (JSON 修复 {attempt+1} 次后通过)", text_color="green"))
+            else:
+                # 再次失败，递归重试
+                threading.Thread(target=self._repair_json_loop, args=(repaired, attempt + 1), daemon=True).start()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            threading.Thread(target=self._repair_json_loop, args=(broken_json, attempt + 1), daemon=True).start()
 
     # ── 构建 ──
     def _go_build(self):
