@@ -326,14 +326,17 @@ class OutlinePage(ctk.CTkFrame):
             t0 = time.time()
             headers = {'Content-Type': 'application/json'}
             if api_key: headers['Authorization'] = f'Bearer {api_key}'
-            for attempt in range(3):  # 最多3次尝试
+            for attempt in range(3):
                 resp = requests.post(f'{api_url.rstrip("/")}/chat/completions', headers=headers,
                     json={'model': model, 'temperature': temp + attempt * 0.15,
+                          'max_tokens': 4096,
                           'messages': [{'role': 'system', 'content': system_prompt},
                                        {'role': 'user', 'content': user_prompt}]}, timeout=120)
                 resp.raise_for_status()
                 data = resp.json()
-                content = data['choices'][0]['message']['content']
+                choice = data['choices'][0]
+                finish = choice.get('finish_reason', '?')
+                content = choice['message']['content']
                 if content and content.strip():
                     usage = data.get('usage', {})
                     pt = usage.get('prompt_tokens', 0); ct = usage.get('completion_tokens', 0)
@@ -343,7 +346,7 @@ class OutlinePage(ctk.CTkFrame):
                     else:
                         log_step('llm', f'  {label}: {time.time()-t0:.1f}s | {pt}in+{ct}out')
                     return content
-                log_step('llm', f'  {label}: 空响应，重试 {attempt+1}/3 (temp={temp+attempt*0.15:.2f})...')
+                log_step('llm', f'  {label}: 空响应(finish={finish})，重试 {attempt+1}/3 (temp={temp+attempt*0.15:.2f})...')
             log_step('outline', f'  {label}: LLM 连续3次返回空，使用兜底占位')
             return ''  # 返回空字符串，由外层 _gen_section 兜底
 
@@ -418,43 +421,28 @@ class OutlinePage(ctk.CTkFrame):
                         raw = _ask("生成 PPT 内容，只返回 JSON 数组，不要解释。", content_prompt, label=f'Task2-{num}')
                         if not raw or not raw.strip():
                             raise ValueError('empty response')
-                        # 多重策略修复 LLM JSON
-                        from scripts.validate_outline import repair_and_validate
+                                                # JSON 数组清理（去 markdown + 尾随逗号）
+                        import re
+                        cleaned = raw.strip()
                         method = ''
-                        fixed, warnings = repair_and_validate(raw)
-                        if fixed is not None:
-                            method = '规则修复'
-                        else:
-                            # 策略2: 去 markdown + 尾随逗号移除
-                            import re
-                            raw2 = raw.strip()
-                            if raw2.startswith('```'): raw2 = re.sub(r'^```\w*\n?', '', raw2); raw2 = re.sub(r'\n?```$', '', raw2)
-                            raw2 = re.sub(r',\s*([}\]])', r'\1', raw2)
-                            fixed, warnings = repair_and_validate(raw2)
-                            if fixed is not None:
-                                method = '去markdown+尾随逗号'
-                            else:
-                                # 策略3: LLM 修复
-                                raw3 = self._llm_repair_json(raw2, api_url, api_key, model)
-                                fixed, warnings = repair_and_validate(raw3)
-                                if fixed is not None:
-                                    method = 'LLM修复'
+                        if cleaned.startswith('```'):
+                            cleaned = re.sub(r'^```\w*\n?', '', cleaned)
+                            cleaned = re.sub(r'\n?```$', '', cleaned)
+                            cleaned = cleaned.strip()
+                            method = '去markdown'
+                        before = cleaned
+                        cleaned = re.sub(r',\s*([}\]])', r'', cleaned)
+                        if cleaned != before:
+                            method = (method + '+尾随逗号').strip('+')
                         if method:
-                            w_str = str(warnings) if warnings else 'OK'
-                            log_step('outline', f'  JSON({method}): {w_str}')
-                        if fixed is None:
-                            raise ValueError(f'JSON 修复失败 (3种策略均无效)')
-                        pages_data = _json.loads(fixed)
+                            log_step('outline', f'  JSON清理({method})')
+                        pages_data = _json.loads(cleaned)
                         if isinstance(pages_data, dict): pages_data = [pages_data]
-                        # 截断到指定页数
                         pages_data = pages_data[:pages]
-                        # 不足则补齐占位页
                         while len(pages_data) < pages:
                             pages_data.append({"type":"result","title":f"{title}","body":["要点一","要点二","要点三"],"images":[]})
-                        # 强制纠正类型：LLM 可能返回错误 type
                         for p in pages_data:
-                            if stype == 'summary':
-                                p['type'] = 'summary'
+                            if stype == 'summary': p['type'] = 'summary'
                             elif stype == 'discussion1' and pages >= 2:
                                 p['type'] = 'discussion1' if pages_data.index(p) == 0 else 'discussion2'
                         return pages_data
@@ -462,12 +450,10 @@ class OutlinePage(ctk.CTkFrame):
                         if retry < 2:
                             log_step('outline', f'  章节{num}重试 {retry+1}/2')
                             return _gen_section(title, pages, stype, retry+1)
-                        # 兜底
                         result = []
                         for pi in range(pages):
                             result.append({"type":"result","title":f"{title} ({pi+1})","body":["要点一","要点二","要点三"],"images":[]})
                         return result
-
                 pages = _gen_section(sec_title, sec_pages, guess_type)
                 all_results.append({'section': num, 'title': sec_title, 'pages': pages})
                 self._safe_ui(lambda i=sec_i: self.status.configure(
