@@ -98,24 +98,27 @@ class OutlinePage(ctk.CTkFrame):
 
     def _foldable_section(self, parent, title, folded=True):
         """创建可折叠区域，返回 (header_btn, content_frame)。"""
+        wrapper = ctk.CTkFrame(parent, fg_color="transparent")
+        wrapper.pack(fill="x", padx=10, pady=(5, 0))
+
         header = ctk.CTkButton(
-            parent, text=('▶ ' if folded else '▼ ') + title,
+            wrapper, text=('▶ ' if folded else '▼ ') + title,
             font=ctk.CTkFont(size=13, weight="bold"),
             anchor="w", fg_color="transparent", text_color=("#333333", "#CCCCCC"),
             hover_color=("#E0E0E0", "#444444"), height=28,
         )
-        header.pack(fill="x", padx=10, pady=(5, 0))
-        content = ctk.CTkFrame(parent)
+        header.pack(fill="x")
+
+        content = ctk.CTkFrame(wrapper)
         if not folded:
-            content.pack(fill="x", padx=10, pady=(0, 5))
+            content.pack(fill="x", pady=(0, 5))
 
         def toggle():
             if content.winfo_ismapped():
                 content.pack_forget()
                 header.configure(text='▶ ' + title)
             else:
-                content.pack(fill="x", padx=10, pady=(0, 5),
-                             before=header.pack_info().get('after', None) or header)
+                content.pack(fill="x", pady=(0, 5), after=header)
                 header.configure(text='▼ ' + title)
 
         header.configure(command=toggle)
