@@ -39,12 +39,10 @@ class OutlinePage(ctk.CTkFrame):
         self.status = ctk.CTkLabel(self, text="请先读取论文", text_color="gray")
         self.status.pack(anchor="w", padx=15)
 
-        # ── 章节配置（可编辑）──
-        ctk.CTkLabel(self, text="章节配置（可编辑标题和页数）",
-                     font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(5, 0))
+        # ── 章节配置（可折叠）──
+        self.section_header, self.sections_frame = self._foldable_section(
+            self, "章节配置（可编辑标题和页数）", folded=False)
         self.section_rows = []  # [(enable_var, title_var, count_var, row_frame)]
-        self.sections_frame = ctk.CTkFrame(self)
-        self.sections_frame.pack(fill="x", padx=10, pady=(0, 5))
 
         # 表头
         hdr = ctk.CTkFrame(self.sections_frame)
@@ -76,10 +74,9 @@ class OutlinePage(ctk.CTkFrame):
         ctk.CTkCheckBox(self.sections_frame, text="附加论文信息页（PDF首页 + 原文链接）",
                          variable=self.paper_info_var).pack(anchor="w", padx=5, pady=(5, 0))
 
-        # ── 论文信息区 ──
-        ctk.CTkLabel(self, text="论文信息（读取论文后自动填充）", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(5, 0))
-        info_frame = ctk.CTkFrame(self)
-        info_frame.pack(fill="x", padx=10, pady=5)
+        # ── 论文信息区（可折叠）──
+        self.info_header, info_frame = self._foldable_section(
+            self, "论文信息（读取论文后自动填充）")
 
         ctk.CTkLabel(info_frame, text="标题:", width=50).grid(row=0, column=0, padx=5, pady=3, sticky="e")
         self.title_entry = ctk.CTkEntry(info_frame, width=500)
@@ -93,10 +90,36 @@ class OutlinePage(ctk.CTkFrame):
         self.author_entry = ctk.CTkEntry(info_frame, width=500)
         self.author_entry.grid(row=2, column=1, padx=5, pady=3, sticky="w")
 
-        # ── 大纲树形编辑器 ──
-        ctk.CTkLabel(self, text="大纲（可展开编辑）", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(10, 0))
-        self.editor = OutlineEditor(self, height=400)
-        self.editor.pack(fill="both", expand=True, padx=10, pady=5)
+        # ── 大纲树形编辑器（可折叠）──
+        self.outline_header, outline_wrapper = self._foldable_section(
+            self, "大纲（可展开编辑）", folded=False)
+        self.editor = OutlineEditor(outline_wrapper, height=400)
+        self.editor.pack(fill="both", expand=True, padx=0, pady=0)
+
+    def _foldable_section(self, parent, title, folded=True):
+        """创建可折叠区域，返回 (header_btn, content_frame)。"""
+        header = ctk.CTkButton(
+            parent, text=('▶ ' if folded else '▼ ') + title,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            anchor="w", fg_color="transparent", text_color=("#333333", "#CCCCCC"),
+            hover_color=("#E0E0E0", "#444444"), height=28,
+        )
+        header.pack(fill="x", padx=10, pady=(5, 0))
+        content = ctk.CTkFrame(parent)
+        if not folded:
+            content.pack(fill="x", padx=10, pady=(0, 5))
+
+        def toggle():
+            if content.winfo_ismapped():
+                content.pack_forget()
+                header.configure(text='▶ ' + title)
+            else:
+                content.pack(fill="x", padx=10, pady=(0, 5),
+                             before=header.pack_info().get('after', None) or header)
+                header.configure(text='▼ ' + title)
+
+        header.configure(command=toggle)
+        return header, content
 
     def _add_section_row(self, title, pages, enabled):
         """添加一行章节配置。"""
