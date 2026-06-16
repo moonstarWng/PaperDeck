@@ -39,32 +39,35 @@ def build_author_slide(prs, data):
     prior_work = data.get('prior_work', [])
 
     # ── 左上卡片：期刊信息 ──
-    R(slide, 0.4, 1.1, 5.8, 2.5, PALETTE_LIGHT, rounded=True)  # 卡片背景
-    R(slide, 0.4, 1.1, 5.8, 0.5, PALETTE_PRIMARY)             # 卡片顶部色条
+    journal_lines = 3  # 名称+IF, 日期, DOI
+    jcard_h = max(2.2, 0.8 + journal_lines * 0.5)
+    R(slide, 0.4, 1.1, 5.8, jcard_h, PALETTE_LIGHT, rounded=True)
+    R(slide, 0.4, 1.1, 5.8, 0.5, PALETTE_PRIMARY)
     T(slide, 0.6, 1.15, 5.4, 0.4, '  期刊信息', sz=Pt(18), bold=True, color=WHITE)
-    # 动态拼接期刊信息：名称、IF、日期、DOI
-    M(slide, 0.7, 1.8, 5.2, 1.5, [
+    M(slide, 0.7, 1.8, 5.2, jcard_h - 0.8, [
         f"{journal.get('name', '')} (IF ~{journal.get('if', '')})" if journal.get('if') else journal.get('name', ''),
         f"{'Nature 子刊' if 'Nature' in journal.get('name', '') else ''} | {journal.get('date', '')}",
         f"DOI: {journal.get('doi', '')}" if journal.get('doi') else '',
     ], sz=BODY_SIZE, color=DARK)
 
     # ── 右上卡片：研究机构 ──
-    R(slide, 6.6, 1.1, 6.3, 2.5, PALETTE_WARM, rounded=True)
-    R(slide, 6.6, 1.1, 6.3, 0.5, PALETTE_ACCENT2)           # 第二强调色顶部色条
+    inst_lines = max(len(institutions), 2)
+    icard_h = max(2.2, 0.8 + inst_lines * 0.5)
+    R(slide, 6.6, 1.1, 6.3, icard_h, PALETTE_WARM, rounded=True)
+    R(slide, 6.6, 1.1, 6.3, 0.5, PALETTE_ACCENT2)
     T(slide, 6.8, 1.15, 5.9, 0.4, '  研究机构', sz=Pt(18), bold=True, color=WHITE)
-    M(slide, 6.9, 1.8, 5.8, 1.5, institutions, sz=BODY_SIZE, color=DARK)
+    M(slide, 6.9, 1.8, 5.8, icard_h - 0.8, institutions, sz=BODY_SIZE, color=DARK)
 
     # ── 底部通栏：通讯作者 + 前期基础 ──
     prior_lines = len(prior_work) if prior_work else 0
-    author_bot_h = max(2.2, 1.2 + prior_lines * 0.5)
-    author_bot_h = min(5.0, author_bot_h)
+    author_bot_h = max(2.2, 1.5 + prior_lines * 0.55)
+    author_bot_h = min(5.5, author_bot_h)
     R(slide, 0.4, 3.9, 12.5, author_bot_h, PALETTE_LIGHT, rounded=True)
     T(slide, 0.7, 4.0, 5.0, 0.4, '  通讯作者', sz=Pt(18), bold=True, color=PALETTE_PRIMARY)
     T(slide, 0.7, 4.5, 11.8, 0.4, authors, sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
     T(slide, 0.7, 5.1, 5.0, 0.4, '  课题组前期研究基础', sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
     if prior_work:
-        M(slide, 0.7, 5.5, 11.8, 1.2, prior_work, sz=BODY_SIZE, color=DARK)
+        M(slide, 0.7, 5.5, 11.8, author_bot_h - 1.3, prior_work, sz=BODY_SIZE, color=DARK)
 
     return slide
 
@@ -89,7 +92,7 @@ def build_background_slide(prs, data):
         cx = 0.45 + i * 4.22
         color = parse_color(card.get("color", "teal"))
         body_lines = [l for l in card.get("body","").strip().split(chr(10)) if l.strip()]
-        card_h = max(2.8, 0.9 + len(body_lines) * 0.55)
+        card_h = max(2.8, 1.1 + len(body_lines) * 0.65)
         card_h = min(5.3, card_h)
         R(slide, cx, 1.15, 4.2, card_h, PALETTE_LIGHT, rounded=True)
         R(slide, cx, 1.15, 4.2, 0.55, color)
