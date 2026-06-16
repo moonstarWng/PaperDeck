@@ -364,17 +364,47 @@ class OutlinePage(ctk.CTkFrame):
 
             # ── Task 2: 章节内容生成 ──
             self._safe_ui(lambda: self.status.configure(text="Task 2/4: 生成章节内容...", text_color="gray"))
+            # 章节标题 → 内容类型映射
+            SECTION_TYPE_MAP = {
+                '作者': 'author', '团队': 'author',
+                '背景': 'background', '课题': 'background',
+                '结果分析': 'result', '结果': 'result',
+                '总结': 'summary', '结论': 'summary',
+                '讨论': 'discussion1', '分析': 'discussion1',
+            }
+            def _guess_type(title):
+                for keyword, stype in SECTION_TYPE_MAP.items():
+                    if keyword in title:
+                        return stype
+                return 'result'
+
             all_results = []
-            # 使用完整论文文本（非摘要），保留关键发现作为引导
             guide = _json.dumps(analysis, ensure_ascii=False)[:2000]
             paper_excerpt = td['paper_text'][:30000]
 
             for sec_i, (sec_title, sec_pages) in enumerate(td['sections']):
                 num = f"0{sec_i+1}"
+                guess_type = _guess_type(sec_title)
 
-                def _gen_section(title, pages, retry=0):
-                    content_prompt = f"""为章节「{title}」生成 {pages} 页内容。返回 JSON 数组:
-[{{"type":"result","title":"页标题","body":["要点1(15-20字)","要点2","要点3"],"images":[]}}]
+                def _gen_section(title, pages, stype, retry=0):
+                    # 根据类型给不同的 prompt
+                    if stype == 'author':
+                        type_hint = '{{"type":"author","journal":{{"name":"期刊名","if":"IF","doi":"DOI","date":"日期"}},"institutions":["机构1"],"authors":"作者列表","prior_work":["前期基础1"]}}'
+                    elif stype == 'background':
+                        type_hint = '{{"type":"background","cards":[{{"title":"卡片标题","body":"内容","color":"teal"}}],"hypothesis":"核心假说"}}'
+                    elif stype == 'summary':
+                        type_hint = '{{"type":"summary","flow_steps":[{{"text":"步骤","color":"teal"}}],"evidence_cards":[{{"title":"证据","detail":"详情"}}],"conclusion":"结论"}}'
+                    elif stype == 'discussion1':
+                        type_hint = '{{"type":"discussion1","items":[{{"number":"1","title":"标题","detail":"详述"}}]}}'
+                    elif stype == 'discussion2':
+                        type_hint = '{{"type":"discussion1","items":[...]}},{{"type":"discussion2","left_title":"局限性","left_items":["..."],"right_title":"临床意义","right_items":["..."]}}'
+                        if pages >= 2:
+                            type_hint = '第1页: {{"type":"discussion1","items":[...]}}, 第2页: {{"type":"discussion2","left_title":"局限性","left_items":["..."],"right_title":"未来方向","right_items":["..."]}}'
+                    else:
+                        type_hint = '{{"type":"result","title":"页标题","body":["要点1","要点2","要点3"],"images":[]}}'
+
+                    content_prompt = f"""生成章节「{title}」的 {pages} 页内容。类型为 {stype}。
+返回 JSON 数组，格式: [{type_hint}]
 
 论文关键发现:
 {guide}
