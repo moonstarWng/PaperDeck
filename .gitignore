@@ -34,5 +34,11 @@ paper/
 # Local-only (not pushed)
 ROADMAP.md
 
+# Process files (runtime generated)
+process/
+*_design.json
+*_page1.jpg
+
 # Temporary
 .paper2ppt_state.json
+.pytest_cache/
