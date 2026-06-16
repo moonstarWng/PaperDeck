@@ -72,6 +72,9 @@ def save_from_shared(shared):
         'api_key': shared.get('api_key', ''),
         'api_model': shared.get('api_model', ''),
         'extract_mode': shared.get('extract_mode', 'llm'),
+        'temperature': shared.get('temperature', '1.0'),
+        'max_tokens': shared.get('max_tokens', '4096'),
+        'top_p': shared.get('top_p', '1.0'),
         'last_pdf': shared.get('pdf_path') or '',
         'last_template': shared.get('template_path') or '',
         'last_figs': shared.get('figs_dir') or '',
@@ -85,6 +88,9 @@ def restore_to_shared(shared):
     shared['api_key'] = config.get('api_key', '')
     shared['api_model'] = config.get('api_model', '')
     shared['extract_mode'] = config.get('extract_mode', 'llm')
+    shared['temperature'] = config.get('temperature', '1.0')
+    shared['max_tokens'] = config.get('max_tokens', '4096')
+    shared['top_p'] = config.get('top_p', '1.0')
     # 路径字段——仅当共享数据中尚未设置时才恢复上次路径
     if not shared.get('pdf_path') and config.get('last_pdf'):
         shared['pdf_path'] = config['last_pdf']

@@ -33,6 +33,8 @@ class OutlinePage(ctk.CTkFrame):
         self.optimize_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(btn_frame, text="多轮优选", variable=self.optimize_var,
                          width=80).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="⚙", width=30, fg_color="#555555",
+                       command=self._open_llm_settings).pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="构建 PPT →", width=100, fg_color="green",
                        command=self._go_build).pack(side="right", padx=5)
 
@@ -347,7 +349,10 @@ class OutlinePage(ctk.CTkFrame):
         total_tokens = 0
 
         import requests, json as _json
-        def _ask(system_prompt, user_prompt, label='', temp=0.3):
+        temp_val = float(self.shared.get('temperature', '1.0'))
+        max_tok = int(self.shared.get('max_tokens', '4096'))
+
+        def _ask(system_prompt, user_prompt, label='', temp=temp_val):
             nonlocal total_tokens
             t0 = time.time()
             headers = {'Content-Type': 'application/json'}
@@ -355,7 +360,7 @@ class OutlinePage(ctk.CTkFrame):
             for attempt in range(3):
                 resp = requests.post(f'{api_url.rstrip("/")}/chat/completions', headers=headers,
                     json={'model': model, 'temperature': temp + attempt * 0.15,
-                          'max_tokens': 4096,
+                          'max_tokens': max_tok,
                           'messages': [{'role': 'system', 'content': system_prompt},
                                        {'role': 'user', 'content': user_prompt}]}, timeout=120)
                 resp.raise_for_status()
@@ -587,7 +592,7 @@ class OutlinePage(ctk.CTkFrame):
                 self._safe_ui(lambda i=i: self.status.configure(
                     text=f"多轮优选: 生成版本 {i+1}/{N}...", text_color="gray"))
                 # 每次温度微调，增加多样性
-                temp = 0.3 + i * 0.2
+                temp = temp_val + i * 0.2
                 # 临时 patch call_llm 不支持 temperature → 用 requests 直调
                 import requests, json as _json
                 sys_prompt = build_system_prompt()
@@ -863,6 +868,10 @@ class OutlinePage(ctk.CTkFrame):
             files = [f for f in os.listdir(figs_dir) if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
             return "\n".join(sorted(files))
         return "(未指定图片目录)"
+
+    def _open_llm_settings(self):
+        from gui.widgets.llm_settings import LLMSettingsWindow
+        LLMSettingsWindow(self, self.shared)
 
     def _check_api(self):
         if not self.shared.get('api_key'):
