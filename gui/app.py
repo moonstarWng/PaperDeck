@@ -60,6 +60,15 @@ class App(ctk.CTk):
         # 启动后刷新配置页（加载恢复的路径和API设置）
         self.config_page.restore_from_shared()
 
+        # Token 统计按钮（右下角）
+        self.stats_btn = ctk.CTkButton(self, text="📊 Token 用量", width=100, height=28,
+                                        fg_color="#333333", command=self._open_token_stats)
+        self.stats_btn.place(relx=1.0, rely=1.0, x=-120, y=-35)
+
+    def _open_token_stats(self):
+        from gui.widgets.token_stats import TokenStatsWindow
+        TokenStatsWindow(self)
+
     def _on_tab_change(self):
         """切换标签页时自动保存。"""
         persistence.save_from_shared(self.shared)

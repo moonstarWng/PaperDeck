@@ -341,6 +341,8 @@ class OutlinePage(ctk.CTkFrame):
                     usage = data.get('usage', {})
                     pt = usage.get('prompt_tokens', 0); ct = usage.get('completion_tokens', 0)
                     total_tokens += pt + ct
+                    from gui.token_tracker import record
+                    record(model, pt, ct)
                     if attempt > 0:
                         log_step('llm', f'  {label}: 重试{attempt}次后成功 ({time.time()-t0:.1f}s | {pt}in+{ct}out)')
                     else:

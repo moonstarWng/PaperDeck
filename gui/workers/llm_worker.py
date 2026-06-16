@@ -103,6 +103,9 @@ def call_llm(base_url, api_key, model, user_prompt, on_progress=None):
     completion_tokens = usage.get('completion_tokens', 0)
     total_tokens = usage.get('total_tokens', prompt_tokens + completion_tokens)
     log_step('llm', f'  完成: {elapsed:.1f}s | tokens: {prompt_tokens}in + {completion_tokens}out = {total_tokens}')
+    # 全局统计
+    from gui.token_tracker import record
+    record(model, prompt_tokens, completion_tokens)
 
     # 尝试从响应中提取 JSON（LLM 可能在前后加了说明文字）
     content = _extract_json(content)
