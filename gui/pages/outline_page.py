@@ -367,21 +367,27 @@ class OutlinePage(ctk.CTkFrame):
             all_results = []
             for sec_i, (sec_title, sec_pages) in enumerate(td['sections']):
                 num = f"0{sec_i+1}"
-                content_prompt = f"""为章节「{sec_title}」生成 {sec_pages} 页内容。返回纯 JSON 数组:
-[{{
-  "type": "result",  // 或 author/background/summary/discussion1/discussion2
-  "title": "页标题",
-  "body": ["要点1(15-20字)", "要点2", "要点3"],  // 恰好3行
-  "images": []  // 先空着
-}}, ...]
+                short_analysis = _json.dumps(analysis, ensure_ascii=False)[:2000]
 
-论文分析:
-{_json.dumps(analysis, ensure_ascii=False)[:3000]}
-图片:
-{td['figs']}"""
-                raw = _ask("你是 PPT 内容生成专家。只返回 JSON 数组。", content_prompt)
-                pages = _json.loads(raw)
-                if isinstance(pages, dict): pages = [pages]
+                def _gen_section(title, pages, analysis_text, retry=0):
+                    content_prompt = f"""为章节生成内容。返回 JSON 数组:
+[{{"type":"result","title":"标题","body":["要点1","要点2","要点3"],"images":[]}}]
+章节: {title}  页数: {pages}
+论文:
+{analysis_text}"""
+                    try:
+                        raw = _ask("你是 PPT 内容生成专家。只返回 JSON 数组，不要解释。", content_prompt)
+                        pages_data = _json.loads(raw)
+                        if isinstance(pages_data, dict): pages_data = [pages_data]
+                        return pages_data
+                    except Exception:
+                        if retry < 2:
+                            log_step('outline', f'  章节{num}重试 {retry+1}/2')
+                            return _gen_section(title, max(pages, 1), analysis_text[:1000], retry+1)
+                        # 兜底：生成占位页
+                        return [{"type":"result","title":f"{title}","body":["要点一","要点二","要点三"],"images":[]}]
+
+                pages = _gen_section(sec_title, sec_pages, short_analysis)
                 all_results.append({'section': num, 'title': sec_title, 'pages': pages})
                 self._safe_ui(lambda i=sec_i: self.status.configure(
                     text=f"Task 2/4: 章节 {i+1}/{len(td['sections'])} ({sec_title})", text_color="gray"))
