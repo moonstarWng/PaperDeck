@@ -14,11 +14,19 @@ from gui.logger import log_step
 class OutlinePage(ctk.CTkFrame):
     """Tab 2: 论文元数据 + 大纲树形编辑器 + 生成 slide-content.json。"""
 
+    # ── 状态机 ──
+    STATE_IDLE = 'idle'
+    STATE_READING = 'reading'
+    STATE_READY = 'ready'
+    STATE_GENERATING = 'generating'
+
     def __init__(self, master, shared, app):
         super().__init__(master)
         self.pack(fill="both", expand=True)
         self.shared = shared
         self.app = app
+        self._state = self.STATE_IDLE
+        self._stop_flag = False  # 中断标志
 
         # ── 顶部按钮栏 ──
         btn_frame = ctk.CTkFrame(self)
@@ -30,6 +38,8 @@ class OutlinePage(ctk.CTkFrame):
         self.gen_btn = ctk.CTkButton(btn_frame, text="生成大纲", width=80, fg_color="#007191",
                                       command=self._generate_outline)
         self.gen_btn.pack(side="left", padx=5)
+        self.stop_btn = ctk.CTkButton(btn_frame, text="■ 停止", width=60, fg_color="#D94F4F",
+                                       command=self._stop_generation)
         self.optimize_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(btn_frame, text="多轮优选", variable=self.optimize_var,
                          width=80).pack(side="left", padx=5)
@@ -37,6 +47,8 @@ class OutlinePage(ctk.CTkFrame):
                        command=self._open_llm_settings).pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="构建 PPT →", width=100, fg_color="green",
                        command=self._go_build).pack(side="right", padx=5)
+
+        self._set_state(self.STATE_IDLE)
 
         self.status = ctk.CTkLabel(self, text="请先读取论文", text_color="gray")
         self.status.pack(anchor="w", padx=15)
@@ -213,11 +225,14 @@ class OutlinePage(ctk.CTkFrame):
 
     # ── 读取论文 ──
     def _read_paper(self):
+        if self._state == self.STATE_GENERATING:
+            return  # 生成中不允许读取
         log_step('outline', '开始读取论文')
         pdf_path = self.shared.get('pdf_path')
         if not pdf_path:
             messagebox.showerror("错误", "请先在配置页选择论文 PDF")
             return
+        self._set_state(self.STATE_READING)
         self.status.configure(text="正在读取论文...", text_color="gray")
         threading.Thread(target=self._do_read_paper, args=(pdf_path,), daemon=True).start()
 
@@ -237,12 +252,14 @@ class OutlinePage(ctk.CTkFrame):
                             text=f"读取中... {c}/{total}", text_color="gray"))
             full_text = "\n\n".join(text_parts)
             self.shared['paper_text'] = full_text
+            self._set_state(self.STATE_READY)
             self._safe_ui(lambda: self.status.configure(
                 text=f"✓ 已读取 {total} 页，共 {len(full_text)} 字符。正在提取元数据...", text_color="gray"))
             self._extract_metadata(full_text)
         except Exception as e:
             import traceback
             traceback.print_exc()
+            self._set_state(self.STATE_IDLE)
             self._safe_ui(lambda: self.status.configure(
                 text=f"读取失败: {e}", text_color="red"))
 
@@ -311,12 +328,16 @@ class OutlinePage(ctk.CTkFrame):
 
     # ── 生成大纲（任务流水线）──
     def _generate_outline(self):
+        if self._state == self.STATE_GENERATING:
+            return  # 防止重复点击
         if not self._check_api():
             return
         paper_text = self.shared.get('paper_text', '')
         if not paper_text:
             messagebox.showerror("错误", "请先读取论文")
             return
+        self._stop_flag = False
+        self._set_state(self.STATE_GENERATING)
         self.status.configure(text="正在分析论文...", text_color="gray")
 
         title = self.title_entry.get().strip()
@@ -353,6 +374,8 @@ class OutlinePage(ctk.CTkFrame):
         max_tok = int(self.shared.get('max_tokens', '4096'))
 
         def _ask(system_prompt, user_prompt, label='', temp=temp_val):
+            if self._stop_flag:
+                raise InterruptedError('用户停止')
             nonlocal total_tokens
             t0 = time.time()
             headers = {'Content-Type': 'application/json'}
@@ -550,12 +573,18 @@ class OutlinePage(ctk.CTkFrame):
             self.shared['slide_content_json'] = result
             elapsed = time.time() - t_start
             log_step('outline', f'任务流水线完成: {elapsed:.1f}s | 总 tokens: {total_tokens}')
+            self._set_state(self.STATE_READY)
             self._safe_ui(lambda: self._load_llm_result(result))
         except Exception as e:
             import traceback
             traceback.print_exc()
             err_msg = str(e)
+            self._set_state(self.STATE_READY)
             self._safe_ui(lambda m=err_msg: self.status.configure(text=f"生成失败: {m}", text_color="red"))
+
+    def _stopped(self):
+        self._set_state(self.STATE_READY)
+        self._safe_ui(lambda: self.status.configure(text="已停止生成", text_color="orange"))
 
     def _safe_ui(self, fn):
         """在主线程安全调用 UI 更新，忽略已销毁的控件。"""
@@ -868,6 +897,29 @@ class OutlinePage(ctk.CTkFrame):
             files = [f for f in os.listdir(figs_dir) if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
             return "\n".join(sorted(files))
         return "(未指定图片目录)"
+
+    def _set_state(self, state):
+        self._state = state
+        if state == self.STATE_IDLE:
+            self.read_btn.configure(state="normal")
+            self.gen_btn.configure(state="disabled")
+            self.stop_btn.pack_forget()
+        elif state == self.STATE_READING:
+            self.read_btn.configure(state="disabled")
+            self.gen_btn.configure(state="disabled")
+            self.stop_btn.pack_forget()
+        elif state == self.STATE_READY:
+            self.read_btn.configure(state="normal")
+            self.gen_btn.configure(state="normal")
+            self.stop_btn.pack_forget()
+        elif state == self.STATE_GENERATING:
+            self.read_btn.configure(state="disabled")
+            self.gen_btn.configure(state="disabled")
+            self.stop_btn.pack(side="left", padx=5, before=self.optimize_var)
+
+    def _stop_generation(self):
+        self._stop_flag = True
+        self._safe_ui(lambda: self.status.configure(text="正在停止...", text_color="orange"))
 
     def _open_llm_settings(self):
         from gui.widgets.llm_settings import LLMSettingsWindow
