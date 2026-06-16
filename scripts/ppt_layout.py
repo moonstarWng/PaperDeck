@@ -236,12 +236,18 @@ def parse_color(val):
 
 
 def T(slide, l, t, w, h, text, sz=None, bold=False, color=None, align=PP_ALIGN.LEFT):
-    """单行文本框。sz/color 默认使用设计令牌。"""
+    """文本框，高度随文字自适应（不低于参数 h）。"""
     if sz is None:
         sz = BODY_SIZE
     if color is None:
         color = BODY_COLOR
-    tb = slide.shapes.add_textbox(Inches(l), Inches(t), Inches(w), Inches(h))
+    # 估算行数：中文约等宽，每字符宽≈sz_pt*0.014in, 行高≈sz_pt*0.022in
+    font_in = sz / 12700
+    char_w_est = font_in * 0.014
+    line_h_est = font_in * 0.022
+    est_lines = max(1, int(len(text) * char_w_est / max(w, 0.5)) + 1)
+    actual_h = max(h, est_lines * line_h_est)
+    tb = slide.shapes.add_textbox(Inches(l), Inches(t), Inches(w), Inches(actual_h))
     tf = tb.text_frame; tf.word_wrap = True
     p = tf.paragraphs[0]; r = p.add_run()
     r.text = text; r.font.name = FONT_EN; r.font.size = sz; r.font.bold = bold
@@ -252,10 +258,13 @@ def T(slide, l, t, w, h, text, sz=None, bold=False, color=None, align=PP_ALIGN.L
 
 
 def M(slide, l, t, w, h, lines, sz=None, color=None):
-    """多行文本框。"""
+    """多行文本框，高度随文字行数自适应（不低于参数 h）。"""
     if sz is None: sz = BODY_SIZE
     if color is None: color = BODY_COLOR
-    tb = slide.shapes.add_textbox(Inches(l), Inches(t), Inches(w), Inches(h))
+    n = max(1, len(lines))
+    line_h = sz / 12700 * 0.022 * 1.3  # 行高含间距
+    actual_h = max(h, n * line_h)
+    tb = slide.shapes.add_textbox(Inches(l), Inches(t), Inches(w), Inches(actual_h))
     tf = tb.text_frame; tf.word_wrap = True
     for i, line in enumerate(lines):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
