@@ -414,17 +414,32 @@ class OutlinePage(ctk.CTkFrame):
                         raw = _ask("生成 PPT 内容，只返回 JSON 数组，不要解释。", content_prompt, label=f'Task2-{num}')
                         if not raw or not raw.strip():
                             raise ValueError('empty response')
-                        # 规则修复 LLM JSON 错误（尾随逗号/markdown/缺失字段）
+                        # 多重策略修复 LLM JSON
                         from scripts.validate_outline import repair_and_validate
+                        method = ''
                         fixed, warnings = repair_and_validate(raw)
+                        if fixed is not None:
+                            method = '规则修复'
+                        else:
+                            # 策略2: 去 markdown + 尾随逗号移除
+                            import re
+                            raw2 = raw.strip()
+                            if raw2.startswith('```'): raw2 = re.sub(r'^```\w*\n?', '', raw2); raw2 = re.sub(r'\n?```$', '', raw2)
+                            raw2 = re.sub(r',\s*([}\]])', r'\1', raw2)
+                            fixed, warnings = repair_and_validate(raw2)
+                            if fixed is not None:
+                                method = '去markdown+尾随逗号'
+                            else:
+                                # 策略3: LLM 修复
+                                raw3 = self._llm_repair_json(raw2, api_url, api_key, model)
+                                fixed, warnings = repair_and_validate(raw3)
+                                if fixed is not None:
+                                    method = 'LLM修复'
+                        if method:
+                            w_str = str(warnings) if warnings else 'OK'
+                            log_step('outline', f'  JSON({method}): {w_str}')
                         if fixed is None:
-                            # 规则修不好，用 LLM 再修一次
-                            raw = self._llm_repair_json(raw, api_url, api_key, model)
-                            fixed, warnings = repair_and_validate(raw)
-                            if fixed is None:
-                                raise ValueError('JSON repair failed')
-                        if warnings:
-                            log_step('outline', f'  JSON 修复: {warnings}')
+                            raise ValueError(f'JSON 修复失败 (3种策略均无效)')
                         pages_data = _json.loads(fixed)
                         if isinstance(pages_data, dict): pages_data = [pages_data]
                         # 截断到指定页数
