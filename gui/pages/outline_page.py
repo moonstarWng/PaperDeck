@@ -219,39 +219,69 @@ class OutlinePage(ctk.CTkFrame):
                 text=f"读取失败: {e}", text_color="red"))
 
     def _extract_metadata(self, paper_text):
-        """使用 LLM 从论文首页提取标题、期刊、作者。"""
+        """元数据提取: Semantic Scholar → LLM 回退。"""
         if not self._check_api():
             return
-        first_page = paper_text[:3000]
-        prompt = f"""从以下论文首页文本中提取元数据，返回纯 JSON:
-{{
-  "title_en": "英文原标题",
-  "journal": "期刊名称",
-  "authors": "作者列表（逗号分隔，取前5位）"
-}}
+        self._safe_ui(lambda: self.status.configure(text="正在查询 Semantic Scholar...", text_color="gray"))
+        threading.Thread(target=self._do_scholar_lookup, args=(paper_text,), daemon=True).start()
+
+    def _do_scholar_lookup(self, paper_text):
+        """通过 Semantic Scholar 搜索论文元数据。"""
+        import urllib.request, urllib.parse
+        try:
+            # 用论文前 200 字作为搜索词
+            query = paper_text[:200].split('\n')[0][:150]
+            q = urllib.parse.quote(query)
+            url = f'https://api.semanticscholar.org/graph/v1/paper/search?query={q}&limit=1&fields=title,authors,journal,year'
+            req = urllib.request.Request(url, headers={'User-Agent': 'PaperDeck/1.0'})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read())
+            if data.get('data'):
+                p = data['data'][0]
+                meta = {
+                    'title_en': p.get('title', ''),
+                    'journal': (p.get('journal', {}) or {}).get('name', '') if p.get('journal') else '',
+                    'authors': ', '.join(a['name'] for a in (p.get('authors', []) or [])[:5]),
+                }
+                if p.get('year'):
+                    meta['journal'] = f"{meta['journal']} ({p['year']})".strip()
+                self._apply_metadata(meta)
+                self._safe_ui(lambda: self.status.configure(
+                    text="✓ 元数据已获取 (Semantic Scholar)", text_color="green"))
+                return
+        except Exception:
+            pass
+        # 回退 LLM
+        self._safe_ui(lambda: self.status.configure(text="Scholar 查询失败，改用 LLM 提取...", text_color="gray"))
+        prompt = f"""从论文首页提取元数据，返回纯 JSON:
+{{"title_en": "英文原标题", "journal": "期刊名称", "authors": "作者列表（逗号分隔，取前5位）"}}
 论文首页:
-{first_page}"""
+{paper_text[:3000]}"""
         threading.Thread(target=self._do_metadata_call, args=(prompt,), daemon=True).start()
+
+    def _apply_metadata(self, meta):
+        self.title_entry.delete(0, 'end'); self.title_entry.insert(0, meta.get('title_en', ''))
+        self.journal_entry.delete(0, 'end'); self.journal_entry.insert(0, meta.get('journal', ''))
+        self.author_entry.delete(0, 'end'); self.author_entry.insert(0, meta.get('authors', ''))
+        self.shared['paper_meta'] = meta
 
     def _do_metadata_call(self, prompt):
         try:
             result = call_llm(self.shared['api_base_url'], self.shared['api_key'],
                               self.shared['api_model'], prompt, on_progress=lambda m: None)
             meta = json.loads(result)
-            def _apply():
-                self.title_entry.delete(0, 'end'); self.title_entry.insert(0, meta.get('title_en', ''))
-                self.journal_entry.delete(0, 'end'); self.journal_entry.insert(0, meta.get('journal', ''))
-                self.author_entry.delete(0, 'end'); self.author_entry.insert(0, meta.get('authors', ''))
-                self.shared['paper_meta'] = meta
-                self.status.configure(text="✓ 元数据已提取，可点击「生成大纲」", text_color="green")
-            self._safe_ui(_apply)
+            self._safe_ui(lambda: self._apply_metadata_and_status(meta))
         except Exception as e:
             import traceback
             traceback.print_exc()
             self._safe_ui(lambda: self.status.configure(
                 text=f"元数据提取失败: {e}（可手动填写）", text_color="orange"))
 
-    # ── 生成大纲 ──
+    def _apply_metadata_and_status(self, meta):
+        self._apply_metadata(meta)
+        self.status.configure(text="✓ 元数据已提取，可点击「生成大纲」", text_color="green")
+
+    # ── 生成大纲（任务流水线）──
     def _generate_outline(self):
         if not self._check_api():
             return
@@ -259,64 +289,143 @@ class OutlinePage(ctk.CTkFrame):
         if not paper_text:
             messagebox.showerror("错误", "请先读取论文")
             return
-        self.status.configure(text="正在调用 LLM 生成大纲...", text_color="gray")
+        self.status.configure(text="正在分析论文...", text_color="gray")
 
         title = self.title_entry.get().strip()
         journal = self.journal_entry.get().strip()
         authors = self.author_entry.get().strip()
-        meta_block = ""
-        if title: meta_block += f'\n论文标题: {title}'
-        if journal: meta_block += f'\n期刊: {journal}'
-        if authors: meta_block += f'\n作者: {authors}'
-
-        # ── 章节约束（从用户配置生成）──
         sections = self._get_section_config()
         if not sections:
             messagebox.showerror("错误", "请至少启用一个章节")
             return
 
-        # ── 章节约束（强约束，LLM 必须遵守）──
-        section_spec = []
-        for i, (title, pages) in enumerate(sections):
-            section_spec.append(f"  章节{i+1}(编号0{i+1}): {title} — 包含 {pages} 个内容页")
-        has_paper_info = self.paper_info_var.get()
+        task_data = {
+            'paper_text': paper_text[:40000],
+            'title': title, 'journal': journal, 'authors': authors,
+            'sections': sections,
+            'figs': self._get_figs_list(),
+            'has_paper_info': self.paper_info_var.get(),
+            'optimize': self.optimize_var.get(),
+        }
+        threading.Thread(target=self._do_task_pipeline, args=(task_data,), daemon=True).start()
 
-        constraint = (
-            f"\n\n## ⚠️ 章节结构约束（不遵守将导致生成失败）\n"
-            f"你必须严格按照以下结构生成 slides 数组，共 {len(sections)} 个章节:\n"
-            + "\n".join(section_spec) + "\n"
-            f"\nslides 数组必须包含:\n"
-            f"  1. 先放 'keep' + 'cover'\n"
-            f"  2. 再放 'keep' + 'toc'\n"
-        )
-        for i, (title, pages) in enumerate(sections):
-            constraint += f"  3+{i}. 'keep' + 'section' (index={i})  → 章节分隔页「{title}」\n"
-            constraint += f"       然后恰好 {pages} 个内容页 (type=result/author/background/summary/discussion)\n"
-        constraint += (
-            f"  N. 最后放 'keep' + 'thanks'\n"
-            f"\n规则:\n"
-            f"1. 总共恰好 {len(sections)} 个 section divider，不能多也不能少\n"
-            f"2. 每个 section 下的内容页数等于上述指定值\n"
-            f"3. 封面: presenter='xxx', date='202X年X月'\n"
-            f"4. 每个 result 页恰好 3 行要点\n"
-        )
-        if has_paper_info:
-            constraint += "5. 在第一个 section 后插入 paper_info 页\n"
-        else:
-            constraint += "5. 不要生成 paper_info 页\n"
+    def _do_task_pipeline(self, td):
+        """Task 流水线: 分析→规划→内容→组装。"""
+        api_url = self.shared['api_base_url']
+        api_key = self.shared['api_key']
+        model = self.shared['api_model']
+        N = 3 if td['optimize'] else 1
 
-        figs = self._get_figs_list()
-        prompt = (
-            f"## 论文元数据{meta_block}\n\n"
-            f"## 论文全文\n{paper_text[:40000]}\n\n"
-            f"## 图片文件列表\n{figs}\n"
-            f"{constraint}\n\n"
-            f"请根据上述内容生成 slide-content.json。"
-        )
-        if self.optimize_var.get():
-            threading.Thread(target=self._do_multi_llm_call, args=(prompt,), daemon=True).start()
-        else:
-            threading.Thread(target=self._do_llm_call, args=(prompt,), daemon=True).start()
+        import requests, json as _json
+        def _ask(system_prompt, user_prompt, temp=0.3):
+            headers = {'Content-Type': 'application/json'}
+            if api_key: headers['Authorization'] = f'Bearer {api_key}'
+            resp = requests.post(f'{api_url.rstrip("/")}/chat/completions', headers=headers,
+                json={'model': model, 'temperature': temp,
+                      'messages': [{'role': 'system', 'content': system_prompt},
+                                   {'role': 'user', 'content': user_prompt}]}, timeout=120)
+            resp.raise_for_status()
+            return resp.json()['choices'][0]['message']['content']
+
+        try:
+            # ── Task 1: 论文分析 ──
+            self._safe_ui(lambda: self.status.configure(text="Task 1/4: 分析论文结构...", text_color="gray"))
+            analysis_prompt = f"""分析以下论文，提取关键信息。返回纯 JSON:
+{{
+  "core_contribution": "一句话核心贡献",
+  "key_findings": ["发现1", "发现2", ...] (5-8条),
+  "methods": ["方法1", "方法2", ...],
+  "implications": ["意义1", ...],
+  "limitations": ["局限1", ...]
+}}
+论文:
+标题: {td['title']}
+期刊: {td['journal']}
+全文:
+{td['paper_text']}"""
+            analysis = _json.loads(_ask("你是论文学术分析专家，提取论文核心信息。只返回 JSON。", analysis_prompt))
+
+            # ── Task 2: 章节内容生成 ──
+            self._safe_ui(lambda: self.status.configure(text="Task 2/4: 生成章节内容...", text_color="gray"))
+            all_results = []
+            for sec_i, (sec_title, sec_pages) in enumerate(td['sections']):
+                num = f"0{sec_i+1}"
+                content_prompt = f"""为章节「{sec_title}」生成 {sec_pages} 页内容。返回纯 JSON 数组:
+[{{
+  "type": "result",  // 或 author/background/summary/discussion1/discussion2
+  "title": "页标题",
+  "body": ["要点1(15-20字)", "要点2", "要点3"],  // 恰好3行
+  "images": []  // 先空着
+}}, ...]
+
+论文分析:
+{_json.dumps(analysis, ensure_ascii=False)[:3000]}
+图片:
+{td['figs']}"""
+                raw = _ask("你是 PPT 内容生成专家。只返回 JSON 数组。", content_prompt)
+                pages = _json.loads(raw)
+                if isinstance(pages, dict): pages = [pages]
+                all_results.append({'section': num, 'title': sec_title, 'pages': pages})
+                self._safe_ui(lambda i=sec_i: self.status.configure(
+                    text=f"Task 2/4: 章节 {i+1}/{len(td['sections'])} ({sec_title})", text_color="gray"))
+
+            # ── Task 3: 图片分配 ──
+            self._safe_ui(lambda: self.status.configure(text="Task 3/4: 分配图片...", text_color="gray"))
+            if td['figs'].strip():
+                fig_list = td['figs']
+                result_titles = []
+                for sec in all_results:
+                    for p in sec['pages']:
+                        if p.get('type') == 'result':
+                            result_titles.append(p.get('title', ''))
+                img_prompt = f"""将图片分配到各结果页。返回纯 JSON:
+{{"mapping": [{{"title": "页标题", "images": ["1A.jpg"]}}, ...]}}
+
+图片: {fig_list}
+结果页: {_json.dumps(result_titles, ensure_ascii=False)}"""
+                img_map = _json.loads(_ask("你是图片分配专家。只返回 JSON。", img_prompt))
+                for sec in all_results:
+                    for p in sec['pages']:
+                        for m in img_map.get('mapping', []):
+                            if m.get('title') == p.get('title'):
+                                p['images'] = m.get('images', [])
+                                break
+
+            # ── Task 4: 组装 ──
+            self._safe_ui(lambda: self.status.configure(text="Task 4/4: 组装大纲...", text_color="gray"))
+            slides = [
+                {"type": "keep", "ref": "cover"},
+                {"type": "keep", "ref": "toc"},
+            ]
+            section_divider_edits = []
+            for sec_i, sec in enumerate(all_results):
+                num = f"0{sec_i+1}"
+                section_divider_edits.append({"number": num, "title": sec['title']})
+                # 第一个 section 后插入 paper_info
+                if sec_i == 0 and td['has_paper_info']:
+                    slides.append({"type": "paper_info", "pdf_path": self.shared.get('pdf_path', ''),
+                                   "paper_title": td['title'], "extra_text": ""})
+                slides.append({"type": "keep", "ref": "section", "index": sec_i})
+                for p in sec['pages']:
+                    slides.append(p)
+            slides.append({"type": "keep", "ref": "thanks"})
+
+            full_config = {
+                "meta": {"template_path": self.shared.get('template_path', ''),
+                         "figs_dir": self.shared.get('figs_dir', ''),
+                         "output_path": "./output.pptx"},
+                "cover": {"title_en": td['title'], "presenter": "xxx", "date": "202X年X月"},
+                "toc_replacements": {},
+                "section_divider_edits": section_divider_edits,
+                "slides": slides,
+            }
+            result = _json.dumps(full_config, indent=2, ensure_ascii=False)
+            self.shared['slide_content_json'] = result
+            self._safe_ui(lambda: self._load_llm_result(result))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self._safe_ui(lambda: self.status.configure(text=f"生成失败: {e}", text_color="red"))
 
     def _safe_ui(self, fn):
         """在主线程安全调用 UI 更新，忽略已销毁的控件。"""
