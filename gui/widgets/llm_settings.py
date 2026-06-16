@@ -15,39 +15,45 @@ class LLMSettingsWindow(ctk.CTkToplevel):
     def __init__(self, master, settings_dict):
         super().__init__(master)
         self.title("LLM 参数设置")
-        self.geometry("380x280")
+        self.geometry("400x320")
         self.resizable(False, False)
         self.after(50, lambda: (self.lift(), self.focus_force()))
+        self.after(150, lambda: (self.lift(), self.focus_force()))
 
         self.settings = settings_dict
         self._ensure_defaults()
 
-        ctk.CTkLabel(self, text="LLM 参数设置", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 10))
+        ctk.CTkLabel(self, text="LLM 参数设置", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
 
-        # 温度
-        row1 = ctk.CTkFrame(self)
-        row1.pack(fill="x", padx=20, pady=5)
-        ctk.CTkLabel(row1, text="温度 (Temperature)", width=140).pack(side="left")
-        self.temp_var = ctk.StringVar(value=self.settings.get('temperature', '1.0'))
-        ctk.CTkEntry(row1, textvariable=self.temp_var, width=80).pack(side="right")
-        ctk.CTkLabel(self, text="越高越随机 (0.0~2.0)，推荐 1.0",
-                     text_color="gray", font=ctk.CTkFont(size=11)).pack(anchor="w", padx=25)
+        # 温度 (0.0~2.0, step 0.1)
+        ctk.CTkLabel(self, text="温度 (Temperature)", font=ctk.CTkFont(size=13)).pack(anchor="w", padx=20)
+        temp_row = ctk.CTkFrame(self)
+        temp_row.pack(fill="x", padx=20, pady=2)
+        self.temp_slider = ctk.CTkSlider(temp_row, from_=0.0, to=2.0, number_of_steps=20,
+                                          command=self._on_temp_change)
+        self.temp_slider.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        self.temp_label = ctk.CTkLabel(temp_row, text="1.0", width=35)
+        self.temp_label.pack(side="right")
+        self.temp_slider.set(float(self.settings.get('temperature', '1.0')))
 
-        # max_tokens
-        row2 = ctk.CTkFrame(self)
-        row2.pack(fill="x", padx=20, pady=5)
-        ctk.CTkLabel(row2, text="最大输出 (max_tokens)", width=140).pack(side="left")
+        # 最大输出 (256~16384)
+        ctk.CTkLabel(self, text="最大输出 (max_tokens)", font=ctk.CTkFont(size=13)).pack(anchor="w", padx=20, pady=(10, 0))
+        mt_row = ctk.CTkFrame(self)
+        mt_row.pack(fill="x", padx=20, pady=2)
+        self.mt_options = ["512", "1024", "2048", "4096", "8192", "16384"]
         self.mt_var = ctk.StringVar(value=self.settings.get('max_tokens', '4096'))
-        ctk.CTkEntry(row2, textvariable=self.mt_var, width=80).pack(side="right")
+        ctk.CTkOptionMenu(mt_row, values=self.mt_options, variable=self.mt_var, width=80).pack(side="right")
 
-        # top_p
-        row3 = ctk.CTkFrame(self)
-        row3.pack(fill="x", padx=20, pady=5)
-        ctk.CTkLabel(row3, text="核采样 (top_p)", width=140).pack(side="left")
-        self.tp_var = ctk.StringVar(value=self.settings.get('top_p', '1.0'))
-        ctk.CTkEntry(row3, textvariable=self.tp_var, width=80).pack(side="right")
-        ctk.CTkLabel(self, text="0.0~1.0，1.0 为不限制",
-                     text_color="gray", font=ctk.CTkFont(size=11)).pack(anchor="w", padx=25)
+        # 核采样 (0.0~1.0, step 0.05)
+        ctk.CTkLabel(self, text="核采样 (top_p)", font=ctk.CTkFont(size=13)).pack(anchor="w", padx=20, pady=(10, 0))
+        tp_row = ctk.CTkFrame(self)
+        tp_row.pack(fill="x", padx=20, pady=2)
+        self.tp_slider = ctk.CTkSlider(tp_row, from_=0.0, to=1.0, number_of_steps=20,
+                                        command=self._on_tp_change)
+        self.tp_slider.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        self.tp_label = ctk.CTkLabel(tp_row, text="1.0", width=35)
+        self.tp_label.pack(side="right")
+        self.tp_slider.set(float(self.settings.get('top_p', '1.0')))
 
         # 按钮
         btn_row = ctk.CTkFrame(self)
@@ -63,22 +69,20 @@ class LLMSettingsWindow(ctk.CTkToplevel):
             if k not in self.settings:
                 self.settings[k] = v
 
+    def _on_temp_change(self, v):
+        self.temp_label.configure(text=f"{float(v):.1f}")
+
+    def _on_tp_change(self, v):
+        self.tp_label.configure(text=f"{float(v):.2f}")
+
     def _restore(self):
-        self.temp_var.set(DEFAULTS['temperature'])
-        self.mt_var.set(DEFAULTS['max_tokens'])
-        self.tp_var.set(DEFAULTS['top_p'])
+        self.temp_slider.set(1.0)
+        self.mt_var.set("4096")
+        self.tp_slider.set(1.0)
 
     def _save(self):
-        try:
-            t = float(self.temp_var.get())
-            m = int(self.mt_var.get())
-            p = float(self.tp_var.get())
-            if t < 0 or t > 2:
-                raise ValueError
-            self.settings['temperature'] = str(t)
-            self.settings['max_tokens'] = str(m)
-            self.settings['top_p'] = str(p)
-            messagebox.showinfo("保存成功", "参数已保存，下次生成大纲生效")
-            self.destroy()
-        except ValueError:
-            messagebox.showerror("格式错误", "温度/核采样应为 0.0~2.0 数字，max_tokens 应为整数")
+        self.settings['temperature'] = f"{self.temp_slider.get():.1f}"
+        self.settings['max_tokens'] = self.mt_var.get()
+        self.settings['top_p'] = f"{self.tp_slider.get():.2f}"
+        messagebox.showinfo("保存成功", "参数已保存，下次生成大纲生效")
+        self.destroy()
