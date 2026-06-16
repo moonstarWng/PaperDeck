@@ -411,15 +411,32 @@ class OutlinePage(ctk.CTkFrame):
 论文全文:
 {paper_excerpt[:20000]}"""
                     try:
-                        raw = _ask("你是 PPT 内容生成专家。只返回 JSON 数组。", content_prompt, label=f'Task2-{num}')
+                        raw = _ask("生成 PPT 内容，只返回 JSON 数组，不要解释。", content_prompt, label=f'Task2-{num}')
+                        if not raw or not raw.strip():
+                            raise ValueError('empty response')
                         pages_data = _json.loads(raw)
                         if isinstance(pages_data, dict): pages_data = [pages_data]
+                        # 截断到指定页数
+                        pages_data = pages_data[:pages]
+                        # 不足则补齐占位页
+                        while len(pages_data) < pages:
+                            pages_data.append({"type":"result","title":f"{title}","body":["要点一","要点二","要点三"],"images":[]})
+                        # 强制纠正类型：LLM 可能返回错误 type
+                        for p in pages_data:
+                            if stype == 'summary':
+                                p['type'] = 'summary'
+                            elif stype == 'discussion1' and pages >= 2:
+                                p['type'] = 'discussion1' if pages_data.index(p) == 0 else 'discussion2'
                         return pages_data
                     except Exception:
                         if retry < 2:
                             log_step('outline', f'  章节{num}重试 {retry+1}/2')
-                            return _gen_section(title, max(pages, 1), stype, retry+1)
-                        return [{"type":"result","title":f"{title}","body":["要点一","要点二","要点三"],"images":[]}]
+                            return _gen_section(title, pages, stype, retry+1)
+                        # 兜底
+                        result = []
+                        for pi in range(pages):
+                            result.append({"type":"result","title":f"{title} ({pi+1})","body":["要点一","要点二","要点三"],"images":[]})
+                        return result
 
                 pages = _gen_section(sec_title, sec_pages, guess_type)
                 all_results.append({'section': num, 'title': sec_title, 'pages': pages})
