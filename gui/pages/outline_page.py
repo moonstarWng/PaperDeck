@@ -414,7 +414,18 @@ class OutlinePage(ctk.CTkFrame):
                         raw = _ask("生成 PPT 内容，只返回 JSON 数组，不要解释。", content_prompt, label=f'Task2-{num}')
                         if not raw or not raw.strip():
                             raise ValueError('empty response')
-                        pages_data = _json.loads(raw)
+                        # 规则修复 LLM JSON 错误（尾随逗号/markdown/缺失字段）
+                        from scripts.validate_outline import repair_and_validate
+                        fixed, warnings = repair_and_validate(raw)
+                        if fixed is None:
+                            # 规则修不好，用 LLM 再修一次
+                            raw = self._llm_repair_json(raw, api_url, api_key, model)
+                            fixed, warnings = repair_and_validate(raw)
+                            if fixed is None:
+                                raise ValueError('JSON repair failed')
+                        if warnings:
+                            log_step('outline', f'  JSON 修复: {warnings}')
+                        pages_data = _json.loads(fixed)
                         if isinstance(pages_data, dict): pages_data = [pages_data]
                         # 截断到指定页数
                         pages_data = pages_data[:pages]
@@ -628,6 +639,23 @@ class OutlinePage(ctk.CTkFrame):
             return versions[best_idx]
         except Exception:
             return versions[0]  # 解析失败则用第一个
+
+    def _llm_repair_json(self, broken, api_url, api_key, model):
+        """调用 LLM 修复 JSON 语法错误。"""
+        import requests
+        try:
+            resp = requests.post(f'{api_url.rstrip("/")}/chat/completions',
+                headers={'Content-Type': 'application/json',
+                         'Authorization': f'Bearer {api_key}'} if api_key else {'Content-Type': 'application/json'},
+                json={'model': model, 'temperature': 0.0,
+                      'messages': [{'role': 'user',
+                                    'content': f'修复 JSON 语法错误，不要改内容: {broken[:6000]}'}]},
+                timeout=30)
+            if resp.status_code == 200:
+                return resp.json()['choices'][0]['message']['content']
+        except Exception:
+            pass
+        return broken
 
     def _load_llm_result(self, result):
         """在主线程加载 LLM 结果，解析失败则自动修复重试。"""
