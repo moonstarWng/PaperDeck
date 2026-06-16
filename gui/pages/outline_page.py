@@ -353,6 +353,10 @@ class OutlinePage(ctk.CTkFrame):
             messagebox.showerror("错误", "请至少启用一个章节")
             return
 
+        # 标题兜底：Scholar/LLM 都失败时用 PDF 文件名
+        if not title and self.shared.get('pdf_path'):
+            import os as _os
+            title = _os.path.splitext(_os.path.basename(self.shared['pdf_path']))[0]
         task_data = {
             'paper_text': paper_text[:40000],
             'title': title, 'journal': journal, 'authors': authors,
@@ -360,6 +364,7 @@ class OutlinePage(ctk.CTkFrame):
             'figs': self._get_figs_list(),
             'has_paper_info': self.paper_info_var.get(),
             'optimize': self.optimize_var.get(),
+            'pdf_path': self.shared.get('pdf_path', ''),
         }
         threading.Thread(target=self._do_task_pipeline, args=(task_data,), daemon=True).start()
 
@@ -553,7 +558,7 @@ class OutlinePage(ctk.CTkFrame):
                 num = f"0{sec_i+1}"
                 section_divider_edits.append({"number": num, "title": sec['title']})
                 if sec_i == 0 and td['has_paper_info']:
-                    slides.append({"type": "paper_info", "pdf_path": self.shared.get('pdf_path', ''),
+                    slides.append({"type": "paper_info", "pdf_path": td.get('pdf_path', ''),
                                    "paper_title": td['title'], "extra_text": ""})
                 slides.append({"type": "keep", "ref": "section", "index": sec_i})
                 for p in sec['pages']:
