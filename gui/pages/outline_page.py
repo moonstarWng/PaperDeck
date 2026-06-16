@@ -6,7 +6,7 @@ import json, sys, os, threading
 from tkinter import messagebox
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from gui.workers.llm_worker import call_llm
+from gui.workers.llm_worker import call_llm, build_system_prompt
 from gui.widgets.outline_editor import OutlineEditor
 from gui.logger import log_step
 
@@ -30,6 +30,9 @@ class OutlinePage(ctk.CTkFrame):
         self.gen_btn = ctk.CTkButton(btn_frame, text="生成大纲", width=80, fg_color="#007191",
                                       command=self._generate_outline)
         self.gen_btn.pack(side="left", padx=5)
+        self.optimize_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(btn_frame, text="多轮优选", variable=self.optimize_var,
+                         width=80).pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="构建 PPT →", width=100, fg_color="green",
                        command=self._go_build).pack(side="right", padx=5)
 
@@ -310,7 +313,10 @@ class OutlinePage(ctk.CTkFrame):
             f"{constraint}\n\n"
             f"请根据上述内容生成 slide-content.json。"
         )
-        threading.Thread(target=self._do_llm_call, args=(prompt,), daemon=True).start()
+        if self.optimize_var.get():
+            threading.Thread(target=self._do_multi_llm_call, args=(prompt,), daemon=True).start()
+        else:
+            threading.Thread(target=self._do_llm_call, args=(prompt,), daemon=True).start()
 
     def _safe_ui(self, fn):
         """在主线程安全调用 UI 更新，忽略已销毁的控件。"""
@@ -333,6 +339,105 @@ class OutlinePage(ctk.CTkFrame):
             traceback.print_exc()
             self._safe_ui(lambda: self.status.configure(
                 text=f"生成失败: {e}", text_color="red"))
+
+    def _do_multi_llm_call(self, prompt):
+        """多轮生成 + 评分优选。"""
+        api_url = self.shared['api_base_url']
+        api_key = self.shared['api_key']
+        model = self.shared['api_model']
+        N = 3
+        versions = []
+
+        try:
+            for i in range(N):
+                self._safe_ui(lambda i=i: self.status.configure(
+                    text=f"多轮优选: 生成版本 {i+1}/{N}...", text_color="gray"))
+                # 每次温度微调，增加多样性
+                temp = 0.3 + i * 0.2
+                # 临时 patch call_llm 不支持 temperature → 用 requests 直调
+                import requests, json as _json
+                sys_prompt = build_system_prompt()
+                headers = {'Content-Type': 'application/json'}
+                if api_key:
+                    headers['Authorization'] = f'Bearer {api_key}'
+                resp = requests.post(
+                    f'{api_url.rstrip("/")}/chat/completions',
+                    headers=headers,
+                    json={'model': model, 'temperature': temp,
+                          'messages': [
+                              {'role': 'system', 'content': sys_prompt},
+                              {'role': 'user', 'content': prompt}]},
+                    timeout=180)
+                resp.raise_for_status()
+                result = resp.json()['choices'][0]['message']['content']
+                versions.append(result)
+
+            # 评分
+            self._safe_ui(lambda: self.status.configure(
+                text=f"多轮优选: 评分 {N} 个版本...", text_color="gray"))
+            best = self._score_versions(versions, api_url, api_key, model)
+
+            self.shared['slide_content_json'] = best
+            self._safe_ui(lambda: self._load_llm_result(best))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            # 回退：用第一个成功的版本
+            if versions:
+                self.shared['slide_content_json'] = versions[0]
+                self._safe_ui(lambda: self._load_llm_result(versions[0]))
+            else:
+                self._safe_ui(lambda: self.status.configure(
+                    text=f"多轮优选失败: {e}", text_color="red"))
+
+    def _score_versions(self, versions, api_url, api_key, model):
+        """评分专家：选出最优版本。"""
+        import requests, json as _json
+        scorer_prompt = """你是一个 PPT 大纲质量评审专家。请对以下 {N} 个 slide-content.json 版本进行评分。
+
+评分标准（每项 1-10 分）：
+1. 章节结构：章节数是否正确、section divider 是否按要求排列
+2. 内容质量：要点是否准确、简洁、有价值
+3. 格式规范：JSON 结构是否符合 schema、每个 result 页是否恰好 3 行
+4. 图片分配：图片是否合理分配到各结果页
+
+对每个版本输出：
+{{
+  "scores": [
+    {{"version": 0, "structure": 8, "content": 7, "format": 9, "images": 6, "note": "简短评价"}},
+    ...
+  ],
+  "best": 0
+}}
+只返回 JSON，不要解释。"""
+
+        prompt_text = scorer_prompt.replace('{N}', str(len(versions)))
+        for i, v in enumerate(versions):
+            prompt_text += f"\n\n=== 版本 {i} ===\n{v[:3000]}"  # 截断以控制 token
+
+        headers = {'Content-Type': 'application/json'}
+        if api_key:
+            headers['Authorization'] = f'Bearer {api_key}'
+        resp = requests.post(
+            f'{api_url.rstrip("/")}/chat/completions',
+            headers=headers,
+            json={'model': model, 'temperature': 0.0,
+                  'messages': [{'role': 'user', 'content': prompt_text}]},
+            timeout=120)
+        resp.raise_for_status()
+        result = resp.json()['choices'][0]['message']['content']
+
+        # 解析评分
+        try:
+            data = _json.loads(result)
+            best_idx = data.get('best', 0)
+            scores = data.get('scores', [])
+            note = scores[best_idx].get('note', '') if best_idx < len(scores) else ''
+            self._safe_ui(lambda: self.status.configure(
+                text=f"✓ 多轮优选完成 (选版本{best_idx+1}: {note})", text_color="green"))
+            return versions[best_idx]
+        except Exception:
+            return versions[0]  # 解析失败则用第一个
 
     def _load_llm_result(self, result):
         """在主线程加载 LLM 结果到编辑器。"""
