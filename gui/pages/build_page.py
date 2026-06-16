@@ -168,6 +168,12 @@ class BuildPage(ctk.CTkFrame):
             elapsed = time.time() - t0
             log_step('build', f'构建完成 ({elapsed:.1f}s) → {output}')
             self._log(f"[完成] ✓ {output}")
+            # 边界检测
+            overflow = self._check_overflow(output)
+            if overflow:
+                self._log(f"[警告] {len(overflow)} 处元素超出边界:")
+                for msg in overflow[:10]:
+                    self._log(f"  {msg}")
             self.status.configure(text=f"✓ 构建完成 → {output}", text_color="green")
         except Exception as e:
             log_error(f"构建失败: {e}", exc_info=True)
@@ -179,6 +185,46 @@ class BuildPage(ctk.CTkFrame):
                 os.unlink(json_path)
             except:
                 pass
+
+    def _check_overflow(self, pptx_path):
+        """检测内容页中文本框是否超出其背景框范围。返回警告列表。"""
+        warnings = []
+        try:
+            from pptx import Presentation as Prs
+            prs = Prs(pptx_path)
+            from scripts.make_template import classify
+            for si, slide in enumerate(prs.slides):
+                cat = classify(slide)
+                if cat not in ('CONTENT', 'CONTENT_FRAME', 'DISCUSSION'):
+                    continue
+                # 收集背景框(浅色大矩形)和文本框
+                bg_boxes = []  # (name, x, y, w, h)
+                text_boxes = []
+                for sh in slide.shapes:
+                    x = sh.left; y = sh.top; w = sh.width; h = sh.height
+                    is_bg = False
+                    try:
+                        if sh.fill.type is not None:
+                            rgb = sh.fill.fore_color.rgb
+                            if min(rgb[0], rgb[1], rgb[2]) > 200:  # 浅色=背景框
+                                is_bg = True
+                    except: pass
+                    if is_bg and w > 914400 * 0.5:  # >0.5in宽
+                        bg_boxes.append((sh.name, x, y, x+w, y+h))
+                    if sh.has_text_frame and sh.text_frame.text.strip():
+                        text_boxes.append((sh.name, x, y, x+w, y+h, sh.text_frame.text.strip()[:30]))
+                # 检查每个文本框是否在其下方的背景框内
+                for t_name, tx1, ty1, tx2, ty2, txt in text_boxes:
+                    inside = False
+                    for b_name, bx1, by1, bx2, by2 in bg_boxes:
+                        if bx1 - 5000 <= tx1 and by1 - 5000 <= ty1 and bx2 + 5000 >= tx2 and by2 + 5000 >= ty2:
+                            inside = True; break
+                    if not inside and ty1 < 6858000 * 0.9:  # 忽略页脚区域
+                        y_in = ty1 / 914400; h_in = (ty2 - ty1) / 914400
+                        warnings.append(f"Slide{si} {t_name}: 文字\"{txt}\" @ y={y_in:.1f}in h={h_in:.2f}in 无背景框")
+        except Exception as e:
+            warnings.append(f"边界检测失败: {e}")
+        return warnings
 
     def _open_folder(self):
         """打开生成的 PPTX 文件（优先）或其所在文件夹。"""

@@ -411,16 +411,9 @@ class OutlinePage(ctk.CTkFrame):
             log_step('outline', f'  {label}: LLM 连续3次返回空，使用兜底占位')
             return ''  # 返回空字符串，由外层 _gen_section 兜底
 
-        total_est = 6 + len(td['sections'])  # 预估 LLM 调用次数
-        done_calls = [0]
-        def _progress(label=''):
-            done_calls[0] += 1
-            pct = min(95, done_calls[0] * 100 // total_est)
-            self._safe_ui(lambda: self.status.configure(text=f"{label} ({pct}%)", text_color="gray"))
-
         try:
             # ── Task 1: 论文分析 ──
-            _progress('Task 1/4: 分析论文...')
+            self._safe_ui(lambda: self.status.configure(text="Task 1/4: 分析论文结构...", text_color="gray"))
             analysis_prompt = f"""分析以下论文，提取关键信息。返回纯 JSON:
 {{
   "core_contribution": "一句话核心贡献",
@@ -437,7 +430,7 @@ class OutlinePage(ctk.CTkFrame):
             analysis = _json.loads(_ask("你是论文学术分析专家，提取论文核心信息。只返回 JSON。", analysis_prompt))
 
             # ── Task 2: 章节内容生成 ──
-            _progress('Task 2/4: 章节内容...')
+            self._safe_ui(lambda: self.status.configure(text="Task 2/4: 生成章节内容...", text_color="gray"))
             # 章节标题 → 内容类型映射
             # 长关键词优先匹配（如"结果总结"先匹配"总结"→summary）
             SECTION_TYPE_MAP = [
@@ -524,11 +517,11 @@ class OutlinePage(ctk.CTkFrame):
                         return result
                 pages = _gen_section(sec_title, sec_pages, guess_type)
                 all_results.append({'section': num, 'title': sec_title, 'pages': pages})
-                n_sec = len(td['sections'])
-                _progress(f'Task 2/4: 章节 {sec_i+1}/{n_sec}')
+                self._safe_ui(lambda i=sec_i: self.status.configure(
+                    text=f"Task 2/4: 章节 {i+1}/{len(td['sections'])} ({sec_title})", text_color="gray"))
 
             # ── Task 3: 图片分配 ──
-            _progress('Task 3/4: 分配图片...')
+            self._safe_ui(lambda: self.status.configure(text="Task 3/4: 分配图片...", text_color="gray"))
             if td['figs'].strip():
                 fig_list = td['figs']
                 result_titles = []

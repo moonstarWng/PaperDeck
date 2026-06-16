@@ -88,19 +88,27 @@ def build_background_slide(prs, data):
 
     cards = data.get('cards', [])
     n_cards = len(cards)
-    card_w = 5.8 if n_cards <= 2 else 3.95
-    gap_x = 0.3 if n_cards <= 2 else 0.27
+    margin = 0.45
+    gap_x = 0.27
+    card_w = (13.33 - margin * 2 - gap_x * (n_cards - 1)) / max(n_cards, 1)
+    card_w = min(card_w, 8.0)
+    # 先计算所有卡片的 body 行数，取最大行数统一高度
+    all_body_lines = []
+    for card in cards:
+        bl = [l for l in card.get("body","").strip().split(chr(10)) if l.strip()]
+        all_body_lines.append(len(bl))
+    max_body = max(all_body_lines) if all_body_lines else 1
+    card_h = max(2.8, 1.1 + max_body * 0.7)
+    card_h = min(5.5, card_h)
     for i, card in enumerate(cards):
-        cx = 0.45 + i * (card_w + gap_x)
+        cx = margin + i * (card_w + gap_x)
         color = parse_color(card.get("color", "teal"))
-        body_lines = [l for l in card.get("body","").strip().split(chr(10)) if l.strip()]
-        card_h = max(3.0, 1.1 + len(body_lines) * 0.7)
-        card_h = min(5.5, card_h)
+        bl = [l for l in card.get("body","").strip().split(chr(10)) if l.strip()]
         R(slide, cx, 1.15, card_w, card_h, PALETTE_LIGHT, rounded=True)
         R(slide, cx, 1.15, card_w, 0.55, color)
         font_sz = Pt(18) if n_cards >= 3 else Pt(20)
         T(slide, cx + 0.15, 1.2, card_w - 0.35, 0.45, card["title"], sz=font_sz, bold=True, color=WHITE)
-        M(slide, cx + 0.15, 1.85, card_w - 0.35, card_h - 0.9, body_lines, sz=BODY_SIZE, color=DARK)
+        M(slide, cx + 0.15, 1.85, card_w - 0.35, card_h - 0.9, bl, sz=BODY_SIZE, color=DARK)
 
     # 底部假说/实验横幅
     hypothesis = data.get('hypothesis', '')
@@ -163,11 +171,18 @@ def build_summary_slide(prs, data):
     if evidence_cards:
         nc = len(evidence_cards)
         cw = min(3.95, (12.5 - (nc - 1) * 0.1) / nc)
+        # 按 detail 文字最多的卡片统一高度
+        max_detail_lines = 1
+        for card in evidence_cards:
+            nlines = len(card.get('detail','')) // 40 + 1  # 约40字/行
+            max_detail_lines = max(max_detail_lines, nlines)
+        ev_h = max(1.4, 0.7 + max_detail_lines * 0.4)  # 标题0.35in+detail动态
+        ev_h = min(2.8, ev_h)
         for i, card in enumerate(evidence_cards):
             cx = 0.45 + i * (cw + 0.1)
-            R(slide, cx, 2.55, cw, 1.7, PALETTE_LIGHT, rounded=True)
+            R(slide, cx, 2.55, cw, ev_h, PALETTE_LIGHT, rounded=True)
             T(slide, cx + 0.2, 2.65, cw - 0.4, 0.35, card['title'], sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
-            T(slide, cx + 0.2, 3.05, cw - 0.4, 0.7, card['detail'], sz=BODY_SIZE, color=DARK)
+            T(slide, cx + 0.2, 3.05, cw - 0.4, ev_h - 0.6, card['detail'], sz=BODY_SIZE, color=DARK)
 
     # ── 底部结论横幅 ──
     conclusions = data.get('conclusions', [])
@@ -247,15 +262,15 @@ def build_discussion2_slide(prs, data):
     # 左栏
     n_left = max(len(left_items), 1); n_right = max(len(right_items), 1)
     max_items = max(n_left, n_right, 1)
-    col_h = min(5.5, 0.75 * max_items + 0.6)  # 动态列高，每项约 0.75in
+    col_h = min(5.5, 0.9 + max_items * 0.6)  # 动态列高，每项约 0.75in
     R(slide, 0.4, 1.1, 6.0, col_h, PALETTE_LIGHT, rounded=True)
     T(slide, 0.7, 1.25, 5.4, 0.4, left_title, sz=Pt(20), bold=True, color=PALETTE_PRIMARY)
-    M(slide, 0.7, 1.8, 5.4, col_h - 0.6, left_items, sz=BODY_SIZE, color=DARK)
+    M(slide, 0.7, 1.8, 5.4, col_h - 0.7, left_items, sz=BODY_SIZE, color=DARK)
 
     # 右栏
     R(slide, 6.8, 1.1, 6.1, col_h, PALETTE_WARM, rounded=True)
     T(slide, 7.1, 1.25, 5.5, 0.4, right_title, sz=Pt(20), bold=True, color=PALETTE_ACCENT2)
-    M(slide, 7.1, 1.8, 5.5, col_h - 0.6, right_items, sz=BODY_SIZE, color=DARK)
+    M(slide, 7.1, 1.8, 5.5, col_h - 0.7, right_items, sz=BODY_SIZE, color=DARK)
 
     return slide
 
