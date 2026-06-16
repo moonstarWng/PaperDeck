@@ -32,7 +32,6 @@ class OutlinePage(ctk.CTkFrame):
         btn_frame = ctk.CTkFrame(self)
         btn_frame.pack(fill="x", padx=10, pady=10)
 
-        ctk.CTkButton(btn_frame, text="← 返回配置", width=100, command=lambda: app.switch_to_tab("配置")).pack(side="left", padx=5)
         self.read_btn = ctk.CTkButton(btn_frame, text="读取论文", width=80, command=self._read_paper)
         self.read_btn.pack(side="left", padx=5)
         self.gen_btn = ctk.CTkButton(btn_frame, text="生成大纲", width=80, fg_color="#007191",
@@ -40,14 +39,22 @@ class OutlinePage(ctk.CTkFrame):
         self.gen_btn.pack(side="left", padx=5)
         self.stop_btn = ctk.CTkButton(btn_frame, text="■ 停止", width=60, fg_color="#D94F4F",
                                        command=self._stop_generation)
+        # 多轮优选 + hover 提示
+        opt_frame = ctk.CTkFrame(btn_frame)
+        opt_frame.pack(side="left", padx=5)
         self.optimize_var = ctk.BooleanVar(value=False)
-        self.optimize_cb = ctk.CTkCheckBox(btn_frame, text="多轮优选", variable=self.optimize_var, width=80)
-        self.optimize_cb.pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="⚙", width=30, fg_color="#555555",
-                       command=self._open_llm_settings).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="💾", width=30, fg_color="#555555",
+        self.optimize_cb = ctk.CTkCheckBox(opt_frame, text="多轮优选", variable=self.optimize_var, width=80)
+        self.optimize_cb.pack(side="left")
+        self.opt_hint = ctk.CTkLabel(opt_frame, text="?", width=20, text_color="#888888",
+                                      cursor="hand2")
+        self.opt_hint.pack(side="left")
+        self._bind_tooltip(self.opt_hint,
+            "多轮优选：生成 N 个大纲版本（温度递增），\n"
+            "再通过 LLM 评分自动选出最优版本。\n"
+            "版本数在「AI配置 → AI参数调整」中设置。")
+        ctk.CTkButton(btn_frame, text="保存大纲", width=70, fg_color="#555555",
                        command=self._save_outline).pack(side="left", padx=2)
-        ctk.CTkButton(btn_frame, text="📂", width=30, fg_color="#555555",
+        ctk.CTkButton(btn_frame, text="读取大纲", width=70, fg_color="#555555",
                        command=self._load_outline).pack(side="left", padx=2)
         ctk.CTkButton(btn_frame, text="构建 PPT →", width=100, fg_color="green",
                        command=self._go_build).pack(side="right", padx=5)
@@ -841,12 +848,23 @@ class OutlinePage(ctk.CTkFrame):
 
         slides = tree_data.get("slides", [])
 
-        # 自动注入论文信息页 —— 仅当用户勾选了该选项
+        # 自动注入/修正论文信息页 —— 仅当用户勾选了该选项
         pdf_path = self.shared.get('pdf_path', '')
         if pdf_path and os.path.exists(pdf_path) and self.paper_info_var.get():
-            has_paper_info = any(s.get('type') == 'paper_info' for s in slides)
-            if not has_paper_info:
-                paper_title = self.title_entry.get().strip()
+            paper_title = self.title_entry.get().strip()
+            existing_pi = None
+            for j, s in enumerate(slides):
+                if s.get('type') == 'paper_info':
+                    existing_pi = (j, s)
+                    break
+            if existing_pi:
+                # 已有 paper_info：如果 pdf_path 为空则补填
+                j, pi_entry = existing_pi
+                if not pi_entry.get('pdf_path'):
+                    pi_entry['pdf_path'] = pdf_path
+                if not pi_entry.get('paper_title'):
+                    pi_entry['paper_title'] = paper_title
+            else:
                 pi = {'type': 'paper_info', 'pdf_path': pdf_path,
                        'paper_title': paper_title, 'extra_text': ''}
                 insert_at = 0
@@ -1025,9 +1043,29 @@ class OutlinePage(ctk.CTkFrame):
         except Exception as e:
             messagebox.showerror("加载失败", str(e))
 
-    def _open_llm_settings(self):
-        from gui.widgets.llm_settings import LLMSettingsWindow
-        LLMSettingsWindow(self, self.shared)
+    def _bind_tooltip(self, widget, text):
+        """给 widget 绑定 hover 提示：鼠标悬浮显示 tooltip，移开消失。"""
+        tooltip = None
+        def _enter(event):
+            nonlocal tooltip
+            if tooltip is None:
+                tooltip = ctk.CTkToplevel(widget)
+                tooltip.overrideredirect(True)
+                tooltip.configure(fg_color="#2b2b2b")
+                lbl = ctk.CTkLabel(tooltip, text=text, justify="left",
+                                    font=ctk.CTkFont(size=12))
+                lbl.pack(padx=8, pady=6)
+                # 定位在 widget 右侧
+                x = widget.winfo_rootx() + widget.winfo_width() + 6
+                y = widget.winfo_rooty()
+                tooltip.geometry(f"+{x}+{y}")
+        def _leave(event):
+            nonlocal tooltip
+            if tooltip:
+                tooltip.destroy()
+                tooltip = None
+        widget.bind("<Enter>", _enter)
+        widget.bind("<Leave>", _leave)
 
     def _check_api(self):
         if not self.shared.get('api_key'):

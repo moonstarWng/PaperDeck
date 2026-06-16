@@ -18,6 +18,40 @@ from ppt_layout import (
 )
 
 
+def _est_wrapped_lines(text_lines, font_sz, box_w_in):
+    """估算文本在指定宽度文本框内的实际折行数。
+
+    text_lines: 已按 \\n 分割的文本行列表
+    font_sz: 字体大小 (EMU, 如 Pt(14))
+    box_w_in: 文本框宽度 (英寸)
+
+    CJK 字符近似等宽 (≈1 em = font_size_inches), ASCII ≈0.55 em。
+    """
+    font_in = font_sz / 12700 / 72  # 磅 → 英寸
+    chars_per_line = max(1, int(box_w_in / font_in))
+    total = 0
+    for line in text_lines:
+        if not line.strip():
+            total += 1
+            continue
+        eff_len = 0
+        for ch in line:
+            if '一' <= ch <= '鿿' or '　' <= ch <= '〿' or '＀' <= ch <= '￯':
+                eff_len += 1.0
+            elif ord(ch) < 128:
+                eff_len += 0.55
+            else:
+                eff_len += 1.0
+        total += max(1, -(-int(eff_len) // chars_per_line))  # ceil
+    return max(1, total)
+
+
+def _body_line_h(font_sz):
+    """段落内折行的实际行高（英寸）。PPT 默认 ~120% 行距。"""
+    return font_sz / 12700 / 72 * 1.25
+
+
+
 def build_author_slide(prs, data):
     """
     构建"作者团队与研究背景"页。
@@ -44,11 +78,24 @@ def build_author_slide(prs, data):
     R(slide, 0.4, 1.1, 5.8, jcard_h, PALETTE_LIGHT, rounded=True)
     R(slide, 0.4, 1.1, 5.8, 0.5, PALETTE_PRIMARY)
     T(slide, 0.6, 1.15, 5.4, 0.4, '  期刊信息', sz=Pt(18), bold=True, color=WHITE)
-    M(slide, 0.7, 1.8, 5.2, jcard_h - 0.8, [
-        f"{journal.get('name', '')} (IF ~{journal.get('if', '')})" if journal.get('if') else journal.get('name', ''),
-        f"{'Nature 子刊' if 'Nature' in journal.get('name', '') else ''} | {journal.get('date', '')}",
-        f"DOI: {journal.get('doi', '')}" if journal.get('doi') else '',
-    ], sz=BODY_SIZE, color=DARK)
+    # 期刊信息行：避免空值产生多余分隔符
+    journal_info_lines = []
+    jname = journal.get('name', '')
+    # 第1行：期刊全名 + IF
+    if jname:
+        if journal.get('if'):
+            journal_info_lines.append(f"{jname} (IF ~{journal['if']})")
+        else:
+            journal_info_lines.append(jname)
+    # 第2行：子刊类型 + 日期（仅当有实际内容时）
+    date_part = journal.get('date', '')
+    nature_part = 'Nature 子刊' if 'Nature' in jname else ''
+    if nature_part or date_part:
+        journal_info_lines.append(f"{nature_part} | {date_part}" if nature_part and date_part else (nature_part or date_part))
+    # 第3行：DOI
+    if journal.get('doi'):
+        journal_info_lines.append(f"DOI: {journal['doi']}")
+    M(slide, 0.7, 1.8, 5.2, jcard_h - 0.8, journal_info_lines, sz=BODY_SIZE, color=DARK)
 
     # ── 右上卡片：研究机构 ──
     inst_lines = max(len(institutions), 2)
@@ -92,36 +139,53 @@ def build_background_slide(prs, data):
     gap_x = 0.27
     card_w = (13.33 - margin * 2 - gap_x * (n_cards - 1)) / max(n_cards, 1)
     card_w = min(card_w, 8.0)
-    # 先计算所有卡片的 body 行数，取最大行数统一高度
-    all_body_lines = []
+    # 用原始 \n 分段估算折行高度（不硬拆行，PPT 自然换行）
+    card_body_w = card_w - 0.35
+    max_wrapped = 1
     for card in cards:
-        bl = [l for l in card.get("body","").strip().split(chr(10)) if l.strip()]
-        all_body_lines.append(len(bl))
-    max_body = max(all_body_lines) if all_body_lines else 1
-    card_h = max(2.8, 1.1 + max_body * 0.7)
-    card_h = min(5.5, card_h)
+        body = card.get("body","").strip()
+        bl = [l for l in body.split(chr(10)) if l.strip()]
+        if bl:
+            n = _est_wrapped_lines(bl, BODY_SIZE, card_body_w)
+            max_wrapped = max(max_wrapped, n)
+    # 段落内折行的真实行高
+    body_line_h = _body_line_h(BODY_SIZE)
+    card_h_ideal = max(2.8, 1.1 + max_wrapped * body_line_h)
+    card_h = min(5.4, card_h_ideal)  # 上限：留 2.0in 给底部假说/实验横幅
+    # 正文溢出时自动缩小字号
+    avail_body_h = card_h - 0.9
+    body_need_h = max_wrapped * body_line_h
+    body_sz = BODY_SIZE
+    if body_need_h > avail_body_h * 1.05:
+        scale = avail_body_h / body_need_h
+        body_sz = Pt(max(10, int(BODY_SIZE / 12700 * scale)))
     for i, card in enumerate(cards):
         cx = margin + i * (card_w + gap_x)
         color = parse_color(card.get("color", "teal"))
         bl = [l for l in card.get("body","").strip().split(chr(10)) if l.strip()]
         R(slide, cx, 1.15, card_w, card_h, PALETTE_LIGHT, rounded=True)
         R(slide, cx, 1.15, card_w, 0.55, color)
-        font_sz = Pt(18) if n_cards >= 3 else Pt(20)
-        T(slide, cx + 0.15, 1.2, card_w - 0.35, 0.45, card["title"], sz=font_sz, bold=True, color=WHITE)
-        M(slide, cx + 0.15, 1.85, card_w - 0.35, card_h - 0.9, bl, sz=BODY_SIZE, color=DARK)
+        title_sz = Pt(18) if n_cards >= 3 else Pt(20)
+        T(slide, cx + 0.15, 1.2, card_w - 0.35, 0.45, card["title"], sz=title_sz, bold=True, color=WHITE)
+        M(slide, cx + 0.15, 1.85, card_w - 0.35, card_h - 0.9, bl, sz=body_sz, color=DARK)
 
-    # 底部假说/实验横幅
+    # 底部假说/实验横幅（位置跟随卡片高度动态调整）
     hypothesis = data.get('hypothesis', '')
     experiment = data.get('experiment', '')
     if hypothesis or experiment:
-        R(slide, 0.45, 5.05, 12.4, 1.8, PALETTE_LIGHT, rounded=True)
-        T(slide, 0.7, 5.15, 11.9, 0.4, '核心假说与实验设计', sz=Pt(18), bold=True, color=PALETTE_PRIMARY)
-        lines = []
+        banner_y = 1.15 + card_h + 0.2  # 卡片底部 + 间距
+        banner_h = 1.8
+        # 确保不超出幻灯片底部 (7.5 - 页脚 ~0.3 = 7.2)
+        if banner_y + banner_h > 7.0:
+            banner_h = max(0.8, 7.0 - banner_y)
+        R(slide, 0.45, banner_y, 12.4, banner_h, PALETTE_LIGHT, rounded=True)
+        T(slide, 0.7, banner_y + 0.1, 11.9, 0.4, '核心假说与实验设计', sz=Pt(18), bold=True, color=PALETTE_PRIMARY)
+        blines = []
         if hypothesis:
-            lines.append('假说: ' + hypothesis)
+            blines.append('假说: ' + hypothesis)
         if experiment:
-            lines.append('实验: ' + experiment)
-        M(slide, 0.7, 5.6, 11.9, 1.1, lines, sz=BODY_SIZE, color=DARK)
+            blines.append('实验: ' + experiment)
+        M(slide, 0.7, banner_y + 0.55, 11.9, banner_h - 0.7, blines, sz=BODY_SIZE, color=DARK)
 
     return slide
 
@@ -168,30 +232,40 @@ def build_summary_slide(prs, data):
 
     # ── 中部证据卡片 ──
     evidence_cards = data.get('evidence_cards', [])
+    ev_end_y = 2.3
     if evidence_cards:
         nc = len(evidence_cards)
         cw = min(3.95, (12.5 - (nc - 1) * 0.1) / nc)
-        # 按 detail 文字最多的卡片统一高度
-        max_detail_lines = 1
+        detail_w = cw - 0.4
+        # 估算折行数（仅算高度，不拆行渲染）
+        max_detail_wrapped = 1
         for card in evidence_cards:
-            nlines = len(card.get('detail','')) // 40 + 1  # 约40字/行
-            max_detail_lines = max(max_detail_lines, nlines)
-        ev_h = max(1.4, 0.7 + max_detail_lines * 0.4)  # 标题0.35in+detail动态
-        ev_h = min(2.8, ev_h)
+            detail_text = card.get('detail', '')
+            if detail_text.strip():
+                n = _est_wrapped_lines([detail_text], BODY_SIZE, detail_w)
+                max_detail_wrapped = max(max_detail_wrapped, n)
+        body_line_h = _body_line_h(BODY_SIZE)
+        ev_h = max(1.4, 0.55 + max_detail_wrapped * body_line_h)
+        ev_h = min(4.5, ev_h)
+        ev_base_y = 2.55
         for i, card in enumerate(evidence_cards):
             cx = 0.45 + i * (cw + 0.1)
-            R(slide, cx, 2.55, cw, ev_h, PALETTE_LIGHT, rounded=True)
-            T(slide, cx + 0.2, 2.65, cw - 0.4, 0.35, card['title'], sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
-            T(slide, cx + 0.2, 3.05, cw - 0.4, ev_h - 0.6, card['detail'], sz=BODY_SIZE, color=DARK)
+            R(slide, cx, ev_base_y, cw, ev_h, PALETTE_LIGHT, rounded=True)
+            T(slide, cx + 0.2, ev_base_y + 0.1, cw - 0.4, 0.35, card['title'], sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
+            T(slide, cx + 0.2, ev_base_y + 0.5, detail_w, ev_h - 0.6, card['detail'], sz=BODY_SIZE, color=DARK)
+        ev_end_y = ev_base_y + ev_h + 0.15
 
-    # ── 底部结论横幅 ──
+    # ── 底部结论横幅（位置跟随证据卡片动态调整）──
     conclusions = data.get('conclusions', [])
     if conclusions:
         conc_h = max(1.5, 0.6 + len(conclusions) * 0.45)
         conc_h = min(3.5, conc_h)
-        R(slide, 0.45, 4.2, 12.4, conc_h, PALETTE_LIGHT, rounded=True)
-        T(slide, 0.7, 4.3, 11.9, 0.35, '核心结论', sz=Pt(18), bold=True, color=PALETTE_PRIMARY)
-        M(slide, 0.7, 4.75, 11.9, conc_h - 0.6, conclusions, sz=BODY_SIZE, color=DARK)
+        conc_y = max(ev_end_y, 4.2)
+        if conc_y + conc_h > 7.0:
+            conc_h = max(0.8, 7.0 - conc_y)
+        R(slide, 0.45, conc_y, 12.4, conc_h, PALETTE_LIGHT, rounded=True)
+        T(slide, 0.7, conc_y + 0.1, 11.9, 0.35, '核心结论', sz=Pt(18), bold=True, color=PALETTE_PRIMARY)
+        M(slide, 0.7, conc_y + 0.55, 11.9, conc_h - 0.6, conclusions, sz=BODY_SIZE, color=DARK)
 
     return slide
 

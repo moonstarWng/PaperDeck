@@ -41,10 +41,17 @@ class App(ctk.CTk):
             'slide_content_json': None,
         }
 
+        # 顶部栏：AI配置按钮
+        top_bar = ctk.CTkFrame(self, height=36)
+        top_bar.pack(fill="x", padx=10, pady=(10, 0))
+        self.ai_btn = ctk.CTkButton(top_bar, text="AI配置", width=80, height=28,
+                                     fg_color="#333333", command=self._open_ai_config)
+        self.ai_btn.pack(side="left")
+
         # 标签页容器
         self.tabview = ctk.CTkTabview(self, command=self._on_tab_change)
-        self.tabview.pack(fill="both", expand=True, padx=10, pady=10)
-        self.tabview.add("配置")
+        self.tabview.pack(fill="both", expand=True, padx=10, pady=(5, 10))
+        self.tabview.add("输入文件")
         self.tabview.add("大纲生成")
         self.tabview.add("构建")
 
@@ -53,21 +60,20 @@ class App(ctk.CTk):
         persistence.restore_to_shared(self.shared)
 
         # 初始化三个页面
-        self.config_page = ConfigPage(self.tabview.tab("配置"), self.shared, self)
+        self.config_page = ConfigPage(self.tabview.tab("输入文件"), self.shared, self)
         self.outline_page = OutlinePage(self.tabview.tab("大纲生成"), self.shared, self)
         self.build_page = BuildPage(self.tabview.tab("构建"), self.shared, self)
 
-        # 启动后刷新配置页（加载恢复的路径和API设置）
+        # 启动后刷新配置页（加载恢复的路径）
         self.config_page.restore_from_shared()
 
-        # Token 统计按钮（右下角）
-        self.stats_btn = ctk.CTkButton(self, text="📊 Token 用量", width=100, height=28,
-                                        fg_color="#333333", command=self._open_token_stats)
-        self.stats_btn.place(relx=1.0, rely=1.0, x=-120, y=-35)
+        # 启动时检查 API 是否配置，未配置则自动弹出
+        if not self.shared.get('api_key', '').strip():
+            self.after(500, self._open_ai_config)
 
-    def _open_token_stats(self):
-        from gui.widgets.token_stats import TokenStatsWindow
-        TokenStatsWindow(self)
+    def _open_ai_config(self):
+        from gui.widgets.ai_config_popup import AIConfigPopup
+        AIConfigPopup(self, self.shared)
 
     def _on_tab_change(self):
         """切换标签页时自动保存。"""

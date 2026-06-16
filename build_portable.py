@@ -7,7 +7,7 @@ build_portable.py — 一键构建 paper2ppt Embeddable 便携包。
 """
 import os, sys, re, shutil, zipfile, subprocess, urllib.request
 
-PYTHON_VERSION = "3.13.9"
+PYTHON_VERSION = "3.14.2"
 PYTHON_EMBED_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
 PORTABLE_DIR = "portable"
 DIST_DIR = "dist"
