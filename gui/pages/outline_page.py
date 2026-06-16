@@ -326,17 +326,23 @@ class OutlinePage(ctk.CTkFrame):
             t0 = time.time()
             headers = {'Content-Type': 'application/json'}
             if api_key: headers['Authorization'] = f'Bearer {api_key}'
-            resp = requests.post(f'{api_url.rstrip("/")}/chat/completions', headers=headers,
-                json={'model': model, 'temperature': temp,
-                      'messages': [{'role': 'system', 'content': system_prompt},
-                                   {'role': 'user', 'content': user_prompt}]}, timeout=120)
-            resp.raise_for_status()
-            data = resp.json()
-            usage = data.get('usage', {})
-            pt = usage.get('prompt_tokens', 0); ct = usage.get('completion_tokens', 0)
-            total_tokens += pt + ct
-            log_step('llm', f'  {label}: {time.time()-t0:.1f}s | {pt}in+{ct}out')
-            return data['choices'][0]['message']['content']
+            for attempt in range(3):
+                resp = requests.post(f'{api_url.rstrip("/")}/chat/completions', headers=headers,
+                    json={'model': model, 'temperature': temp,
+                          'messages': [{'role': 'system', 'content': system_prompt},
+                                       {'role': 'user', 'content': user_prompt}]}, timeout=120)
+                resp.raise_for_status()
+                data = resp.json()
+                content = data['choices'][0]['message']['content']
+                if content and content.strip():
+                    usage = data.get('usage', {})
+                    pt = usage.get('prompt_tokens', 0); ct = usage.get('completion_tokens', 0)
+                    total_tokens += pt + ct
+                    log_step('llm', f'  {label}: {time.time()-t0:.1f}s | {pt}in+{ct}out')
+                    return content
+                log_step('llm', f'  {label}: 空响应，重试 {attempt+1}/3...')
+                temp += 0.1  # 稍微提高温度增加多样性
+            raise RuntimeError(f'{label}: LLM 返回空响应，重试3次仍失败')
 
         try:
             # ── Task 1: 论文分析 ──
@@ -442,7 +448,8 @@ class OutlinePage(ctk.CTkFrame):
         except Exception as e:
             import traceback
             traceback.print_exc()
-            self._safe_ui(lambda: self.status.configure(text=f"生成失败: {e}", text_color="red"))
+            err_msg = str(e)
+            self._safe_ui(lambda m=err_msg: self.status.configure(text=f"生成失败: {m}", text_color="red"))
 
     def _safe_ui(self, fn):
         """在主线程安全调用 UI 更新，忽略已销毁的控件。"""
