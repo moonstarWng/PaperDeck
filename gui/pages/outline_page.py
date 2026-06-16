@@ -365,29 +365,34 @@ class OutlinePage(ctk.CTkFrame):
             # ── Task 2: 章节内容生成 ──
             self._safe_ui(lambda: self.status.configure(text="Task 2/4: 生成章节内容...", text_color="gray"))
             all_results = []
+            # 使用完整论文文本（非摘要），保留关键发现作为引导
+            guide = _json.dumps(analysis, ensure_ascii=False)[:2000]
+            paper_excerpt = td['paper_text'][:30000]
+
             for sec_i, (sec_title, sec_pages) in enumerate(td['sections']):
                 num = f"0{sec_i+1}"
-                short_analysis = _json.dumps(analysis, ensure_ascii=False)[:2000]
 
-                def _gen_section(title, pages, analysis_text, retry=0):
-                    content_prompt = f"""为章节生成内容。返回 JSON 数组:
-[{{"type":"result","title":"标题","body":["要点1","要点2","要点3"],"images":[]}}]
-章节: {title}  页数: {pages}
-论文:
-{analysis_text}"""
+                def _gen_section(title, pages, retry=0):
+                    content_prompt = f"""为章节「{title}」生成 {pages} 页内容。返回 JSON 数组:
+[{{"type":"result","title":"页标题","body":["要点1(15-20字)","要点2","要点3"],"images":[]}}]
+
+论文关键发现:
+{guide}
+
+论文全文:
+{paper_excerpt[:20000]}"""
                     try:
-                        raw = _ask("你是 PPT 内容生成专家。只返回 JSON 数组，不要解释。", content_prompt)
+                        raw = _ask("你是 PPT 内容生成专家。只返回 JSON 数组。", content_prompt, label=f'Task2-{num}')
                         pages_data = _json.loads(raw)
                         if isinstance(pages_data, dict): pages_data = [pages_data]
                         return pages_data
                     except Exception:
                         if retry < 2:
                             log_step('outline', f'  章节{num}重试 {retry+1}/2')
-                            return _gen_section(title, max(pages, 1), analysis_text[:1000], retry+1)
-                        # 兜底：生成占位页
+                            return _gen_section(title, max(pages, 1), retry+1)
                         return [{"type":"result","title":f"{title}","body":["要点一","要点二","要点三"],"images":[]}]
 
-                pages = _gen_section(sec_title, sec_pages, short_analysis)
+                pages = _gen_section(sec_title, sec_pages)
                 all_results.append({'section': num, 'title': sec_title, 'pages': pages})
                 self._safe_ui(lambda i=sec_i: self.status.configure(
                     text=f"Task 2/4: 章节 {i+1}/{len(td['sections'])} ({sec_title})", text_color="gray"))
