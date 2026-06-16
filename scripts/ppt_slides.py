@@ -178,20 +178,26 @@ def build_discussion1_slide(prs, data):
     title_bar(slide, data.get('title', '4 讨论'))
 
     items = data.get('items', [])
+    # 根据条目数动态调整间距，避免文字重叠
+    n_items = max(len(items), 1)
+    available_h = 5.8  # title_bar 下方可用高度
+    row_h = min(1.48, available_h / n_items)  # 每行高度，最多 1.48in
     for i, item in enumerate(items):
-        y = 1.15 + i * 1.48                           # 每条目的垂直位置
-        # 青色圆形编号标记（形状类型 9 = 椭圆）
-        c = slide.shapes.add_shape(9, Inches(0.55), Inches(y + 0.1), Inches(0.5), Inches(0.5))
+        y = 1.15 + i * row_h
+        detail_h = max(0.6, row_h - 0.55)  # 详细描述高度自适应
+        # 圆形编号
+        c = slide.shapes.add_shape(9, Inches(0.55), Inches(y + 0.05), Inches(0.45), Inches(0.45))
         c.fill.solid(); c.fill.fore_color.rgb = PALETTE_PRIMARY; c.line.fill.background()
-        T(slide, 0.55, y + 0.15, 0.5, 0.4, item.get('number', str(i + 1)),
+        T(slide, 0.55, y + 0.08, 0.45, 0.4, item.get('number', str(i + 1)),
            sz=Pt(14), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
         # 标题
-        T(slide, 1.25, y, 3.0, 0.4, item['title'], sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
+        T(slide, 1.25, y, 3.0, 0.35, item['title'], sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
         # 详细描述
-        T(slide, 1.25, y + 0.4, 11.5, 0.85, item['detail'], sz=BODY_SIZE, color=DARK)
-        # 分隔线（最后一项不加）
+        T(slide, 1.25, y + 0.35, 11.5, detail_h, item['detail'], sz=BODY_SIZE, color=DARK)
+        # 分隔线
         if i < len(items) - 1:
-            sep = slide.shapes.add_shape(1, Inches(1.25), Inches(y + 1.32), Inches(11.0), Pt(0.5))
+            sep_y = y + row_h - 0.08
+            sep = slide.shapes.add_shape(1, Inches(1.25), Inches(sep_y), Inches(11.0), Pt(0.5))
             sep.fill.solid(); sep.fill.fore_color.rgb = RGBColor(0xDD, 0xDD, 0xDD)
             sep.line.fill.background()
 
@@ -221,14 +227,17 @@ def build_discussion2_slide(prs, data):
     right_items = data.get('right_items', [])
 
     # 左栏
-    R(slide, 0.4, 1.1, 6.0, 5.5, PALETTE_LIGHT, rounded=True)
+    n_left = max(len(left_items), 1); n_right = max(len(right_items), 1)
+    max_items = max(n_left, n_right)
+    col_h = min(5.5, 0.6 * max_items + 0.5)  # 动态列高，每项约 0.6in
+    R(slide, 0.4, 1.1, 6.0, col_h, PALETTE_LIGHT, rounded=True)
     T(slide, 0.7, 1.25, 5.4, 0.4, left_title, sz=Pt(20), bold=True, color=PALETTE_PRIMARY)
-    M(slide, 0.7, 1.8, 5.4, 4.5, left_items, sz=BODY_SIZE, color=DARK)
+    M(slide, 0.7, 1.8, 5.4, col_h - 0.6, left_items, sz=BODY_SIZE, color=DARK)
 
     # 右栏
-    R(slide, 6.8, 1.1, 6.1, 5.5, PALETTE_WARM, rounded=True)
+    R(slide, 6.8, 1.1, 6.1, col_h, PALETTE_WARM, rounded=True)
     T(slide, 7.1, 1.25, 5.5, 0.4, right_title, sz=Pt(20), bold=True, color=PALETTE_ACCENT2)
-    M(slide, 7.1, 1.8, 5.5, 4.5, right_items, sz=BODY_SIZE, color=DARK)
+    M(slide, 7.1, 1.8, 5.5, col_h - 0.6, right_items, sz=BODY_SIZE, color=DARK)
 
     return slide
 
