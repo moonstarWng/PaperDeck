@@ -127,6 +127,7 @@ class BuildPage(ctk.CTkFrame):
         config['meta']['template_path'] = self.shared.get('template_path', '')
         config['meta']['figs_dir'] = self.shared.get('figs_dir', '')
         config['meta']['output_path'] = output_path
+        config['meta']['paper_meta'] = self.shared.get('paper_meta', {})
 
         # 写入临时 JSON 文件
         tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8')
@@ -135,6 +136,7 @@ class BuildPage(ctk.CTkFrame):
         tmp.close()
 
         self.output_path = output_path
+        log_step('build', f'开始构建 → {output_path}')
         self._log(f"[开始] 输出 → {output_path}")
         self.build_btn.configure(state="disabled")
         self.status.configure(text="构建中...", text_color="gray")
@@ -142,6 +144,8 @@ class BuildPage(ctk.CTkFrame):
 
     def _do_build(self, json_path):
         """在后台线程中执行构建。"""
+        import time
+        t0 = time.time()
         try:
             self._log("[验证] 检查并修复 JSON...")
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'scripts'))
@@ -162,7 +166,15 @@ class BuildPage(ctk.CTkFrame):
             config = load_json(json_path)
             output = build(config, json_path)
             self.output_path = output
+            elapsed = time.time() - t0
+            log_step('build', f'构建完成 ({elapsed:.1f}s) → {output}')
             self._log(f"[完成] ✓ {output}")
+            # 边界检测
+            overflow = self._check_overflow(output)
+            if overflow:
+                self._log(f"[警告] {len(overflow)} 处元素超出边界:")
+                for msg in overflow[:10]:
+                    self._log(f"  {msg}")
             self.status.configure(text=f"✓ 构建完成 → {output}", text_color="green")
         except Exception as e:
             log_error(f"构建失败: {e}", exc_info=True)
@@ -175,13 +187,70 @@ class BuildPage(ctk.CTkFrame):
             except:
                 pass
 
+    def _check_overflow(self, pptx_path):
+        """检测内容页中文本框是否超出其背景框范围。返回警告列表。"""
+        warnings = []
+        try:
+            from pptx import Presentation as Prs
+            prs = Prs(pptx_path)
+            from scripts.make_template import classify
+            for si, slide in enumerate(prs.slides):
+                cat = classify(slide)
+                if cat not in ('CONTENT', 'CONTENT_FRAME', 'DISCUSSION'):
+                    continue
+                # 收集背景框(浅色大矩形)和文本框
+                bg_boxes = []  # (name, x, y, w, h)
+                text_boxes = []
+                for sh in slide.shapes:
+                    x = sh.left; y = sh.top; w = sh.width; h = sh.height
+                    is_bg = False
+                    try:
+                        if sh.fill.type is not None:
+                            rgb = sh.fill.fore_color.rgb
+                            if min(rgb[0], rgb[1], rgb[2]) > 200:  # 浅色=背景框
+                                is_bg = True
+                    except: pass
+                    if is_bg and w > 914400 * 0.5:  # >0.5in宽
+                        bg_boxes.append((sh.name, x, y, x+w, y+h))
+                    if sh.has_text_frame and sh.text_frame.text.strip():
+                        text_boxes.append((sh.name, x, y, x+w, y+h, sh.text_frame.text.strip()[:30]))
+                # 检查每个文本框是否在其下方的背景框内
+                for t_name, tx1, ty1, tx2, ty2, txt in text_boxes:
+                    inside = False
+                    for b_name, bx1, by1, bx2, by2 in bg_boxes:
+                        if bx1 - 5000 <= tx1 and by1 - 5000 <= ty1 and bx2 + 5000 >= tx2 and by2 + 5000 >= ty2:
+                            inside = True; break
+                    if not inside and ty1 < 6858000 * 0.9:  # 忽略页脚区域
+                        y_in = ty1 / 914400; h_in = (ty2 - ty1) / 914400
+                        warnings.append(f"Slide{si} {t_name}: 文字\"{txt}\" @ y={y_in:.1f}in h={h_in:.2f}in 无背景框")
+        except Exception as e:
+            warnings.append(f"边界检测失败: {e}")
+        return warnings
+
     def _open_folder(self):
-        """在资源管理器中打开输出文件夹。"""
+        """打开生成的 PPTX 文件（优先）或其所在文件夹。"""
         path = self.output_path or self.out_var.get().strip()
-        out_dir = os.path.dirname(path) if path else ''
-        if out_dir and os.path.exists(out_dir):
-            os.startfile(out_dir)
-        elif path:
-            messagebox.showinfo("提示", "文件尚未生成")
-        else:
+        if not path:
             messagebox.showinfo("提示", "尚未构建")
+            return
+
+        # 安全检查：确保路径在合理范围内
+        norm = os.path.normpath(os.path.abspath(path))
+        if not norm.lower().endswith('.pptx'):
+            messagebox.showinfo("提示", "输出文件必须是 .pptx 格式")
+            return
+
+        if os.path.isfile(norm):
+            # 文件已生成 → 直接打开
+            try:
+                os.startfile(norm)
+                self._log(f"[打开] {norm}")
+            except OSError as e:
+                messagebox.showerror("错误", f"无法打开文件:\n{e}")
+        else:
+            # 文件尚未生成 → 打开所在文件夹
+            out_dir = os.path.dirname(norm)
+            if os.path.isdir(out_dir):
+                os.startfile(out_dir)
+            else:
+                messagebox.showinfo("提示", "输出目录不存在，请先构建")

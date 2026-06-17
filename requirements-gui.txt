@@ -3,6 +3,8 @@ pyinstaller>=6.0
 python-pptx
 pypdf
 pdfplumber
+pypdfium2
 lxml
 Pillow
 requests
+pytest

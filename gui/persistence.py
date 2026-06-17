@@ -71,6 +71,10 @@ def save_from_shared(shared):
         'api_base_url': shared.get('api_base_url', ''),
         'api_key': shared.get('api_key', ''),
         'api_model': shared.get('api_model', ''),
+        'extract_mode': shared.get('extract_mode', 'pptm'),
+        'temperature': shared.get('temperature', '1.0'),
+        'max_tokens': shared.get('max_tokens', '4096'),
+        'top_p': shared.get('top_p', '1.0'),
         'last_pdf': shared.get('pdf_path') or '',
         'last_template': shared.get('template_path') or '',
         'last_figs': shared.get('figs_dir') or '',
@@ -83,6 +87,15 @@ def restore_to_shared(shared):
     shared['api_base_url'] = config.get('api_base_url', '')
     shared['api_key'] = config.get('api_key', '')
     shared['api_model'] = config.get('api_model', '')
+    saved_mode = config.get('extract_mode', 'pptm')
+    # 迁移：旧默认 "llm" → 新默认 "pptm"
+    # 仅当用户从未手动选择过其他模式时才迁移（"rule" 是明确选择，保留）
+    if saved_mode == 'llm':
+        saved_mode = 'pptm'
+    shared['extract_mode'] = saved_mode
+    shared['temperature'] = config.get('temperature', '1.0')
+    shared['max_tokens'] = config.get('max_tokens', '4096')
+    shared['top_p'] = config.get('top_p', '1.0')
     # 路径字段——仅当共享数据中尚未设置时才恢复上次路径
     if not shared.get('pdf_path') and config.get('last_pdf'):
         shared['pdf_path'] = config['last_pdf']
