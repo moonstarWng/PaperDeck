@@ -108,28 +108,41 @@ class ConfigPage(ctk.CTkFrame):
 
     # ── 文件合法性实时检测 ──
     def _validate_pdf(self, path):
+        self.shared['pdf_path'] = path if path and os.path.exists(path) else ''
         if not path:
             self.pdf_status.configure(text="未选择", text_color="gray")
         elif os.path.exists(path):
             self.pdf_status.configure(text="✓ 文件有效", text_color="green")
         else:
             self.pdf_status.configure(text="✗ 文件不存在", text_color="red")
+        self._persist_now()
 
     def _validate_tmpl(self, path):
+        self.shared['template_path'] = path if path and os.path.exists(path) else ''
         if not path:
             self.tmpl_status.configure(text="未选择", text_color="gray")
         elif os.path.exists(path):
             self.tmpl_status.configure(text="✓ 文件有效（点击「检测」判断是否为模板骨架）", text_color="green")
         else:
             self.tmpl_status.configure(text="✗ 文件不存在", text_color="red")
+        self._persist_now()
 
     def _validate_figs(self, path):
+        self.shared['figs_dir'] = path if path and os.path.exists(path) else ''
         if not path:
             self.figs_status.configure(text="(可选)", text_color="gray")
         elif os.path.exists(path):
             self.figs_status.configure(text="✓ 目录有效", text_color="green")
         else:
             self.figs_status.configure(text="✗ 目录不存在", text_color="red")
+        self._persist_now()
+
+    def _persist_now(self):
+        try:
+            from gui.persistence import save_from_shared
+            save_from_shared(self.shared)
+        except Exception:
+            pass
 
     def _validate_files(self):
         self._validate_pdf(self.pdf_picker.get_path())
@@ -449,6 +462,10 @@ class ConfigPage(ctk.CTkFrame):
 
         try:
             ol = self.app.outline_page
+
+            # 清空上次的旧数据，防止残留
+            for key in ('slide_content_json', 'paper_text', 'paper_meta', 'paper_title', '_one_click_ready'):
+                self.shared.pop(key, None)
 
             # ── Step 1: 读取论文 + 提取元数据（等同于自动点"读取论文"按钮）──
             if stopped(): return self._finish_one_click("已停止")

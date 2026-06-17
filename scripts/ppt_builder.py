@@ -141,6 +141,17 @@ def edit_toc(slide, toc_map, section_titles=None):
         # 收集 TOC 条目对 (number_shape, title_shape) — 按位置识别
         num_shapes = []   # X < 2.0in → 编号
         title_shapes = [] # X >= 2.0in → 标题
+        # ── 诊断：dump 所有形状 ──
+        print(f"  [edit_toc] slide has {len(slide.shapes)} shapes:")
+        for sh in slide.shapes:
+            has_tf = sh.has_text_frame
+            stype = str(sh.shape_type)
+            x = sh.left / 914400
+            y = sh.top / 914400
+            w = sh.width / 914400
+            h = sh.height / 914400
+            txt = sh.text_frame.text.strip()[:60] if has_tf and sh.text_frame.text else ''
+            print(f"    type={stype} x={x:.1f} y={y:.1f} w={w:.1f} h={h:.2f} has_text={has_tf} text='{txt}'")
         for shape in slide.shapes:
             if not shape.has_text_frame:
                 continue
@@ -156,6 +167,11 @@ def edit_toc(slide, toc_map, section_titles=None):
                 title_shapes.append(shape)
         num_shapes.sort(key=lambda s: s.top)
         title_shapes.sort(key=lambda s: s.top)
+        print(f"  [edit_toc] num_shapes={len(num_shapes)} title_shapes={len(title_shapes)}")
+
+        if not num_shapes or not title_shapes:
+            print(f"  [edit_toc] WARNING: 无法识别的目录页布局（num或title为空），跳过编辑")
+            return
 
         n_existing = min(len(num_shapes), len(title_shapes))
         n_needed = len(section_titles)
@@ -414,68 +430,29 @@ def build(config, json_path='.'):
     section_indices = list(indices.get('sections', []))
 
     # ── 章节页不够时用代码重建（必须在 new_order 构建之前）──
-    def _add_section_slide(prs, base_slide):
-        """重建一个与模板章节页布局一致的章节页。从模板复制字体样式和配色。"""
-        from pptx.dml.color import RGBColor
-        # 从模板读取字体
-        tmpl_num_font = None
-        tmpl_title_font = None
+    def _clone_section_slide(prs, base_slide):
+        """深拷贝模板章节页的所有形状，完整保留模板设计。"""
+        import copy as _copy
+        new_s = prs.slides.add_slide(base_slide.slide_layout)
         for sh in base_slide.shapes:
-            if sh.has_text_frame:
-                for p in sh.text_frame.paragraphs:
-                    for r in p.runs:
-                        if r.text.strip().isdigit() and len(r.text.strip()) == 2:
-                            tmpl_num_font = r.font
-                        elif len(r.text.strip()) >= 2:
-                            tmpl_title_font = r.font
-
-        layout = base_slide.slide_layout
-        new_s = prs.slides.add_slide(layout)
-        # 全幅深色背景 + 左侧竖条配色（从模板提取，bg 永远取最暗的）
-        bg_color, accent = _detect_section_colors(base_slide)
-        bg = new_s.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.33), Inches(7.5))
-        bg.fill.solid(); bg.fill.fore_color.rgb = bg_color; bg.line.fill.background()
-        # 左侧竖条
-        bar = new_s.shapes.add_shape(1, Inches(0), Inches(0), Inches(1.2), Inches(7.5))
-        bar.fill.solid(); bar.fill.fore_color.rgb = accent; bar.line.fill.background()
-        # 编号 TextBox
-        num_box = new_s.shapes.add_textbox(Inches(1.5), Inches(2.5), Inches(1.5), Inches(1.0))
-        p = num_box.text_frame.paragraphs[0]; p.alignment = PP_ALIGN.LEFT
-        r = p.add_run(); r.text = '00'
-        if tmpl_num_font:
-            r.font.size = tmpl_num_font.size; r.font.bold = tmpl_num_font.bold
-            r.font.name = tmpl_num_font.name
-            try: r.font.color.rgb = tmpl_num_font.color.rgb
-            except: r.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-        else:
-            r.font.size = Pt(56); r.font.bold = True
-            r.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF); r.font.name = 'Arial'
-        # 标题 TextBox
-        title_box = new_s.shapes.add_textbox(Inches(3.0), Inches(2.5), Inches(7.0), Inches(1.0))
-        tp = title_box.text_frame.paragraphs[0]
-        tr = tp.add_run(); tr.text = 'Section Title'
-        if tmpl_title_font:
-            tr.font.size = tmpl_title_font.size; tr.font.bold = tmpl_title_font.bold
-            tr.font.name = tmpl_title_font.name
-            try: tr.font.color.rgb = tmpl_title_font.color.rgb
-            except: tr.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-        else:
-            tr.font.size = Pt(44); tr.font.bold = True
-            tr.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF); tr.font.name = 'Arial'
-        # 装饰线
-        deco = new_s.shapes.add_shape(1, Inches(1.5), Inches(3.8), Inches(3.0), Pt(2))
-        deco.fill.solid(); deco.fill.fore_color.rgb = accent; deco.line.fill.background()
-        # 底部横条
-        bot = new_s.shapes.add_shape(1, Inches(0), Inches(7.35), Inches(13.33), Pt(3))
-        bot.fill.solid(); bot.fill.fore_color.rgb = accent; bot.line.fill.background()
+            _clone_shape(new_s, sh)
+        # 同时拷贝 slide 级别的背景 XML
+        bg_el = base_slide._element.find('.//{http://schemas.openxmlformats.org/presentationml/2006/main}cSld/bg')
+        if bg_el is not None:
+            cSld = new_s._element.find('.//{http://schemas.openxmlformats.org/presentationml/2006/main}cSld')
+            if cSld is not None:
+                existing_bg = cSld.find('{http://schemas.openxmlformats.org/presentationml/2006/main}bg')
+                if existing_bg is not None:
+                    cSld.remove(existing_bg)
+                cSld.insert(0, _copy.deepcopy(bg_el))
         return new_s
 
     if section_indices and section_divider_map and len(section_indices) < len(section_divider_map):
         base_slide = prs.slides[section_indices[0]]
         n_need = len(section_divider_map) - len(section_indices)
-        print(f"  模板仅 {len(section_indices)} 个章节页，自动创建 {n_need} 个")
+        print(f"  模板仅 {len(section_indices)} 个章节页，克隆 {n_need} 个")
         for _ in range(n_need):
-            new_s = _add_section_slide(prs, base_slide)
+            new_s = _clone_section_slide(prs, base_slide)
             section_indices.append(len(prs.slides) - 1)
     # 如果检测到的章节页多于需要的，用第一个做模板统一重建（避免内容页误判为章节页）
     elif section_indices and section_divider_map and len(section_indices) > len(section_divider_map):
@@ -483,7 +460,7 @@ def build(config, json_path='.'):
         base_slide = prs.slides[section_indices[0]]
         section_indices = [section_indices[0]]
         for _ in range(len(section_divider_map) - 1):
-            new_s = _add_section_slide(prs, base_slide)
+            new_s = _clone_section_slide(prs, base_slide)
             section_indices.append(len(prs.slides) - 1)
 
     new_order = []          # 最终幻灯片排列顺序（模板原始索引 + 新幻灯片索引）
@@ -577,15 +554,25 @@ def build(config, json_path='.'):
 
     # ── 编辑模板幻灯片文字 ──
     print("Editing template slides...")
+    print(f"  indices: cover={indices.get('cover')} toc={indices.get('toc')} thanks={indices.get('thanks')} sections={section_indices} total_slides={len(prs.slides)}")
     if 'cover' in config:
-        edit_cover(prs.slides[indices.get('cover', 0)], config['cover'], template_path)
+        ci = indices.get('cover', 0)
+        print(f"  edit_cover: index={ci} (slide exists: {ci < len(prs.slides)})")
+        edit_cover(prs.slides[ci], config['cover'], template_path)
     if 'toc_replacements' in config:
+        ti = indices.get('toc', 1)
+        print(f"  edit_toc: index={ti} (slide exists: {ti < len(prs.slides)})")
         stitles = [sde['title'] for sde in section_divider_map] if section_divider_map else None
-        edit_toc(prs.slides[indices.get('toc', 1)], config.get('toc_replacements', {}), stitles)
+        edit_toc(prs.slides[ti], config.get('toc_replacements', {}), stitles)
     # 编辑章节分隔页（已在前面克隆补充够数量）
+    print(f"  section edits: map={len(section_divider_map)} indices={len(section_indices)}")
     for i, sde in enumerate(section_divider_map):
         if i < len(section_indices):
-            edit_section_divider(prs.slides[section_indices[i]], sde['number'], sde['title'])
+            si = section_indices[i]
+            print(f"    section[{i}]: idx={si} '{sde['number']} {sde['title']}'")
+            edit_section_divider(prs.slides[si], sde['number'], sde['title'])
+        else:
+            print(f"    section[{i}]: SKIP (index out of range)")
     # 致谢页保持模板原文，不做任何修改
 
     # ── 重排序幻灯片 ──

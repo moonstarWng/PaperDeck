@@ -418,10 +418,10 @@ def build_paper_info_slide(prs, data):
         T(slide, value_x, cur_y, value_w, h, value, sz=value_sz, color=value_color)
         cur_y += h + 0.02
 
-    # 标题
+    # 标题（取实际文本框高度，避免标题折行时与表格重叠）
     if paper_title:
-        T(slide, right_x, cur_y, right_w, 0.55, paper_title, sz=Pt(16), bold=True, color=PALETTE_PRIMARY)
-        cur_y += 0.55
+        tb = T(slide, right_x, cur_y, right_w, 0.55, paper_title, sz=Pt(16), bold=True, color=PALETTE_PRIMARY)
+        cur_y += max(0.55, tb.height / 914400)
 
     # ── 表格行 ──
     authors = pm.get('authors', '')

@@ -452,6 +452,12 @@ def make_result_slide(prs, title, body_lines, img_specs, figs_dir='.'):
     area_bot = 6.85
     area_h = area_bot - area_top
 
+    # ── 每页最多 4 张图，多余丢弃 ──
+    MAX_IMGS = 4
+    if len(img_specs) > MAX_IMGS:
+        print(f"  WARNING: {len(img_specs)} 张图超出上限，只保留前 {MAX_IMGS} 张")
+        img_specs = img_specs[:MAX_IMGS]
+
     # ── 预加载图片 ──
     img_info = []
     for spec in img_specs:
