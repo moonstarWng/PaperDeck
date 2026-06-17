@@ -79,7 +79,7 @@ class OutlinePage(ctk.CTkFrame):
         self._default_sections = [
             ('作者团队', '1'),
             ('课题背景', '1'),
-            ('结果分析', '4'),
+            ('结果分析', '3'),
             ('结果总结', '1'),
             ('讨论分析', '2'),
         ]

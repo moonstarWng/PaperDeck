@@ -75,14 +75,25 @@ def build_author_slide(prs, data):
 
     # ── 底部通栏：通讯作者 + 前期基础 ──
     prior_lines = len(prior_work) if prior_work else 0
+    # 动态上限：不超出幻灯片底部 (7.5 - footer ~0.3 = 7.2)
+    max_bot_h = 7.0 - 3.9  # ≈ 3.1
     author_bot_h = max(2.2, 1.5 + prior_lines * 0.55)
-    author_bot_h = min(5.5, author_bot_h)
+    author_bot_h = min(max_bot_h, author_bot_h)
     R(slide, 0.4, 3.9, 12.5, author_bot_h, PALETTE_LIGHT, rounded=True)
     T(slide, 0.7, 4.0, 5.0, 0.4, '  通讯作者', sz=Pt(18), bold=True, color=PALETTE_PRIMARY)
     T(slide, 0.7, 4.5, 11.8, 0.4, authors, sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
     T(slide, 0.7, 5.1, 5.0, 0.4, '  课题组前期研究基础', sz=BODY_SIZE, bold=True, color=PALETTE_PRIMARY)
     if prior_work:
-        M(slide, 0.7, 5.5, 11.8, author_bot_h - 1.3, prior_work, sz=BODY_SIZE, color=DARK)
+        # 自动缩字号：内容超出可用高度时等比缩小（最低 7pt）
+        avail_h = author_bot_h - 1.3
+        body_line_h = _line_h(BODY_SIZE)
+        est_lines = _est_wrapped_lines(prior_work, BODY_SIZE, 11.8)
+        need_h = est_lines * body_line_h
+        p_sz = BODY_SIZE
+        if need_h > avail_h * 1.05:
+            scale = avail_h / need_h
+            p_sz = Pt(max(7, int(BODY_SIZE / 12700 * scale)))
+        M(slide, 0.7, 5.5, 11.8, avail_h, prior_work, sz=p_sz, color=DARK)
 
     return slide
 
@@ -119,14 +130,19 @@ def build_background_slide(prs, data):
     # 段落内折行的真实行高
     body_line_h = _line_h(BODY_SIZE)
     card_h_ideal = max(2.8, 1.1 + max_wrapped * body_line_h)
-    card_h = min(5.4, card_h_ideal)  # 上限：留 2.0in 给底部假说/实验横幅
+    # 卡片高度上限：需为底部横幅留空间 (标题栏+区域顶部 ~1.15, 横幅最小 ~0.8, 间距 ~0.2, 页脚 ~0.5)
+    max_card_h = 7.0 - 1.15 - 0.2 - 0.8  # ≈ 4.85
+    card_h = min(max_card_h, card_h_ideal)
     # 正文溢出时自动缩小字号
     avail_body_h = card_h - 0.9
     body_need_h = max_wrapped * body_line_h
     body_sz = BODY_SIZE
     if body_need_h > avail_body_h * 1.05:
         scale = avail_body_h / body_need_h
-        body_sz = Pt(max(10, int(BODY_SIZE / 12700 * scale)))
+        body_sz = Pt(max(7, int(BODY_SIZE / 12700 * scale)))
+    # 再次按缩放后字体估算实际所需高度
+    scaled_line_h = _line_h(body_sz)
+    scaled_need_h = max_wrapped * scaled_line_h
     for i, card in enumerate(cards):
         cx = margin + i * (card_w + gap_x)
         color = parse_color(card.get("color", "teal"))
@@ -137,7 +153,11 @@ def build_background_slide(prs, data):
         T(slide, cx + 0.15, 1.2, card_w - 0.35, 0.45, card["title"], sz=title_sz, bold=True, color=WHITE)
         # 截断过长卡片文本
         bl_trunc = truncate_lines(bl, body_sz, card_w - 0.35, card_h - 0.9)
-        M(slide, cx + 0.15, 1.85, card_w - 0.35, card_h - 0.9, bl_trunc, sz=body_sz, color=DARK)
+        tb = M(slide, cx + 0.15, 1.85, card_w - 0.35, card_h - 0.9, bl_trunc, sz=body_sz, color=DARK)
+        # 强制裁剪溢出的文本框高度，防止超出卡片边界
+        max_tb_h = card_h - 0.9
+        if tb.height > Inches(max_tb_h):
+            tb.height = Inches(max_tb_h)
 
     # 底部假说/实验横幅（位置跟随卡片高度动态调整）
     hypothesis = data.get('hypothesis', '')
@@ -346,7 +366,7 @@ def build_discussion2_slide(prs, data):
 def build_paper_info_slide(prs, data):
     """
     论文信息页：左侧 PDF 首页截图 + 右侧原文链接（自动搜索）。
-    data: {pdf_path, paper_title, extra_text}
+    data: {pdf_path, paper_title, extra_text, paper_meta}
     """
     import urllib.request, urllib.parse
     slide = prs.slides.add_slide(blank_layout(prs))
@@ -356,6 +376,7 @@ def build_paper_info_slide(prs, data):
     pdf_path = data.get('pdf_path', '')
     pm = data.get('paper_meta', {})
     paper_title = pm.get('title_en') or data.get('paper_title', '')
+    print(f"  [paper_info] pm keys={list(pm.keys())} title='{paper_title[:50] if paper_title else ''}' author={bool(pm.get('authors'))} journal={bool(pm.get('journal') or pm.get('citation'))} year={pm.get('year')} doi={bool(pm.get('doi'))}")
 
     # ── 左侧：PDF 首页渲染 ──
     first_page_img = None

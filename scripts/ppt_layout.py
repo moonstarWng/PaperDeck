@@ -305,7 +305,7 @@ def T(slide, l, t, w, h, text, sz=None, bold=False, color=None, align=PP_ALIGN.L
 
 
 def M(slide, l, t, w, h, lines, sz=None, color=None):
-    """多行文本框，高度按实际折行估算（不低于参数 h）。
+    """多行文本框，高度不超出参数 h（硬上限）。长文本会被 PPT 自然裁剪。
 
     逐字符加权计算折行数（CJK≈1em, ASCII≈0.55em），不再简单按段落数计算。
     """
@@ -316,7 +316,8 @@ def M(slide, l, t, w, h, lines, sz=None, color=None):
         text_lines = ['']
     est_lines = _est_wrapped_lines(text_lines, sz, w)
     line_h_val = _line_h(sz)
-    actual_h = max(h, est_lines * line_h_val + (len(text_lines) - 1) * 0.04)
+    needed_h = est_lines * line_h_val + (len(text_lines) - 1) * 0.04
+    actual_h = min(h, needed_h)  # 硬上限：不超出容器
     tb = slide.shapes.add_textbox(Inches(l), Inches(t), Inches(w), Inches(actual_h))
     tf = tb.text_frame; tf.word_wrap = True
     for i, line in enumerate(lines):
@@ -404,8 +405,14 @@ def title_bar(slide, text):
         l = slide.shapes.add_shape(1, Inches(0.6), Inches(0.68), Inches(12.1), Pt(1.5))
         l.fill.solid(); l.fill.fore_color.rgb = RGBColor(0xCC, 0xCC, 0xCC); l.line.fill.background()
 
-    # 2. 再画标题文字（在最上层）
-    T(slide, 0.5, 0.15, 12.3, 0.55, text, sz=TITLE_SIZE, bold=True, color=TITLE_COLOR)
+    # 2. 确定标题文字色：若存在深色背景条则自动用高对比度白色
+    title_font_color = TITLE_COLOR
+    for x, y, w, h, c in (HEADER_DECOS or []):
+        # 检查是否有覆盖标题区域 (y≈0.15) 的深色背景条
+        if w > 10 and y < 0.3 and y + h > 0.3 and _luminance(c) < 0.3:
+            title_font_color = WHITE
+            break
+    T(slide, 0.5, 0.15, 12.3, 0.55, text, sz=TITLE_SIZE, bold=True, color=title_font_color)
 
     # 3. 页脚装饰条
     for y, c, h in FOOTER_BARS:

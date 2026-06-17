@@ -304,6 +304,43 @@ def edit_section_divider(slide, number, title):
 # 主编排器
 # ═══════════════════════════════════════════
 
+def _detect_section_colors(slide):
+    """从模板章节页提取背景色和强调色。bg_color 始终取最暗的全幅形状。"""
+    from pptx.dml.color import RGBColor
+    from ppt_layout import _luminance
+    best_bg = RGBColor(0x1A, 0x1A, 0x1A)  # fallback
+    best_bg_L = 1.0
+    accent = RGBColor(0xFF, 0xFF, 0xFF)
+    sidebar_rgb = None
+    try:
+        for sh in slide.shapes:
+            w, h = sh.width/914400, sh.height/914400
+            # 全幅背景：取最暗的（亮度最低）
+            if w > 12 and h > 6:
+                try:
+                    if sh.fill.type is not None:
+                        rgb = sh.fill.fore_color.rgb
+                        L = _luminance(rgb)
+                        if L < best_bg_L:
+                            best_bg = rgb
+                            best_bg_L = L
+                except: pass
+            # 左侧竖条：取第一个符合条件的
+            if h > 5 and 0.3 < w < 5:
+                try:
+                    if sh.fill.type is not None and sidebar_rgb is None:
+                        rgb = sh.fill.fore_color.rgb
+                        if max(rgb[0], rgb[1], rgb[2]) > 35:
+                            sidebar_rgb = rgb
+                except: pass
+    except: pass
+    if sidebar_rgb is not None:
+        sb_L = _luminance(sidebar_rgb)
+        if abs(best_bg_L - sb_L) > 0.15:
+            accent = sidebar_rgb
+    return best_bg, accent
+
+
 def build(config, json_path='.'):
     """
     主编排函数：加载模板 → 构建所有幻灯片 → 编辑模板页 → 重排序 → 保存。
@@ -378,7 +415,7 @@ def build(config, json_path='.'):
 
     # ── 章节页不够时用代码重建（必须在 new_order 构建之前）──
     def _add_section_slide(prs, base_slide):
-        """重建一个与模板章节页布局一致的章节页。从模板复制字体样式。"""
+        """重建一个与模板章节页布局一致的章节页。从模板复制字体样式和配色。"""
         from pptx.dml.color import RGBColor
         # 从模板读取字体
         tmpl_num_font = None
@@ -394,16 +431,8 @@ def build(config, json_path='.'):
 
         layout = base_slide.slide_layout
         new_s = prs.slides.add_slide(layout)
-        # 全幅深色背景（从模板读颜色）
-        bg_color = RGBColor(0x1A, 0x1A, 0x1A)
-        accent = RGBColor(0xE6, 0x39, 0x46)
-        try:
-            for sh in base_slide.shapes:
-                if sh.width/914400 > 12 and sh.height/914400 > 6:
-                    if sh.fill.type is not None:
-                        bg_color = sh.fill.fore_color.rgb
-                        break
-        except: pass
+        # 全幅深色背景 + 左侧竖条配色（从模板提取，bg 永远取最暗的）
+        bg_color, accent = _detect_section_colors(base_slide)
         bg = new_s.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.33), Inches(7.5))
         bg.fill.solid(); bg.fill.fore_color.rgb = bg_color; bg.line.fill.background()
         # 左侧竖条
@@ -448,6 +477,14 @@ def build(config, json_path='.'):
         for _ in range(n_need):
             new_s = _add_section_slide(prs, base_slide)
             section_indices.append(len(prs.slides) - 1)
+    # 如果检测到的章节页多于需要的，用第一个做模板统一重建（避免内容页误判为章节页）
+    elif section_indices and section_divider_map and len(section_indices) > len(section_divider_map):
+        print(f"  检测到 {len(section_indices)} 个章节页（多于需要的 {len(section_divider_map)}），统一重建")
+        base_slide = prs.slides[section_indices[0]]
+        section_indices = [section_indices[0]]
+        for _ in range(len(section_divider_map) - 1):
+            new_s = _add_section_slide(prs, base_slide)
+            section_indices.append(len(prs.slides) - 1)
 
     new_order = []          # 最终幻灯片排列顺序（模板原始索引 + 新幻灯片索引）
     section_used = 0        # 跟踪下一次使用哪个章节分隔页
@@ -461,6 +498,31 @@ def build(config, json_path='.'):
         'discussion2': build_discussion2_slide,
         'paper_info': build_paper_info_slide,
     }
+
+    # ── 预处理：结果页最多 3 页，多余的无图页合并到最后一页 ──
+    MAX_RESULT_SLIDES = 3
+    result_items = [it for it in slides_plan if it.get('type') == 'result']
+    if len(result_items) > MAX_RESULT_SLIDES:
+        for i in range(len(result_items) - 1, MAX_RESULT_SLIDES - 1, -1):
+            ri = result_items[i]
+            if not ri.get('images'):
+                prev = result_items[i - 1]
+                prev['body'] = prev.get('body', []) + [''] + ri.get('body', [])
+                print(f"  合并结果页 {i+1} 正文到结果页 {i}（无图）")
+        new_plan = []
+        result_count = 0
+        exceeded = False
+        for it in slides_plan:
+            if it.get('type') == 'result':
+                result_count += 1
+                if result_count <= MAX_RESULT_SLIDES:
+                    new_plan.append(it)
+                else:
+                    exceeded = True
+            else:
+                new_plan.append(it)
+        if exceeded:
+            slides_plan = new_plan
 
     # ── 遍历构建计划，逐一创建幻灯片 ──
     for item in slides_plan:
@@ -501,6 +563,9 @@ def build(config, json_path='.'):
                 pm = config.get('meta', {}).get('paper_meta', {})
                 if pm:
                     item.setdefault('paper_meta', pm)
+                    print(f"  paper_info: 元数据已注入 ({len(pm)} keys: {list(pm.keys())[:8]})")
+                else:
+                    print(f"  paper_info: 元数据为空 (config.meta 无 paper_meta)")
             slide_builders[stype](prs, item)
             new_order.append(len(prs.slides) - 1)
             print(f"  {stype}: {item.get('title', '')[:60]}")
