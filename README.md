@@ -4,6 +4,12 @@
 
 ![使用演示](asset/使用示例.gif)
 
+<p align="center">
+  <a href="https://github.com/moonstarWng/PaperDeck/releases">
+    <img src="https://img.shields.io/badge/📥%20下载-最新%20Release-blue?style=for-the-badge" alt="下载最新 Release">
+  </a>
+</p>
+
 ---
 
 ## 👥 这个工具适合你吗？
@@ -32,6 +38,8 @@
 
 ## 🚀 快速开始（3 分钟）
 
+> 📥 **[下载最新版](https://github.com/moonstarWng/PaperDeck/releases)** → 解压 → 双击 `启动.bat`
+>
 > 以 demo2 为例：[Attention Is All You Need](https://arxiv.org/abs/1706.03762) 论文 → 生成汇报 PPT。
 
 ![生成效果预览](asset/PPT生成效果图.png)
