@@ -1,8 +1,8 @@
 """
-gui/pages/config_page.py — 输入文件页：PDF + 模板 + 图片目录 + 模板检测/提取。
+gui/pages/config_page.py — 输入文件页：PDF + 模板 + 图片目录 + 模板检测/提取 + 一键生成。
 """
 import customtkinter as ctk
-import sys, os, threading
+import sys, os, threading, time, json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from gui.widgets.file_picker import FilePicker
 from gui.logger import log_step
@@ -55,7 +55,11 @@ class ConfigPage(ctk.CTkFrame):
         mode_frame = ctk.CTkFrame(self)
         mode_frame.pack(fill="x", padx=10, pady=(5, 0))
         ctk.CTkLabel(mode_frame, text="提取模式:", width=70).pack(side="left", padx=(5, 0))
-        self.extract_mode = ctk.StringVar(value="llm")
+        self.extract_mode = ctk.StringVar(value="pptm")
+        self.mode_pptm_btn = ctk.CTkRadioButton(
+            mode_frame, text="PPT Master (推荐)", variable=self.extract_mode, value="pptm",
+            command=self._on_mode_change)
+        self.mode_pptm_btn.pack(side="left", padx=5)
         self.mode_rule_btn = ctk.CTkRadioButton(
             mode_frame, text="规则 (快速)", variable=self.extract_mode, value="rule",
             command=self._on_mode_change)
@@ -75,9 +79,32 @@ class ConfigPage(ctk.CTkFrame):
         self.figs_status = ctk.CTkLabel(self, text="(可选)", text_color="gray")
         self.figs_status.pack(anchor="w", padx=20)
 
-        # ═══ 下一步按钮 ═══
+        # ═══ 一键生成 + 精细控制 ═══
+        btn_frame = ctk.CTkFrame(self)
+        btn_frame.pack(fill="x", padx=10, pady=(15, 5))
+
+        self.one_click_btn = ctk.CTkButton(
+            btn_frame, text="一键生成 PPT", height=44, width=200,
+            fg_color="#2E7D32", font=ctk.CTkFont(size=16, weight="bold"),
+            command=self._one_click_generate)
+        self.one_click_btn.pack(side="left", padx=5)
+
+        self.one_click_stop_btn = ctk.CTkButton(
+            btn_frame, text="停止", height=44, width=60,
+            fg_color="#C0392B", command=self._stop_one_click)
+        # 默认隐藏，生成时显示
+
+        self.one_click_status = ctk.CTkLabel(btn_frame, text="", text_color="gray")
+        self.one_click_status.pack(side="left", padx=10)
+
+        self.expert_cb = ctk.CTkCheckBox(
+            btn_frame, text="精细控制", width=90,
+            command=self._toggle_expert)
+        self.expert_cb.pack(side="right", padx=10)
+
+        # 原下一步按钮（专家模式下显示）
         self.next_btn = ctk.CTkButton(self, text="下一步: 生成大纲 →", height=36, command=self._go_next)
-        self.next_btn.pack(pady=20)
+        # 默认隐藏，勾选精细控制后显示
 
     # ── 文件合法性实时检测 ──
     def _validate_pdf(self, path):
@@ -112,7 +139,9 @@ class ConfigPage(ctk.CTkFrame):
     # ── 模式切换 ──
     def _on_mode_change(self):
         mode = self.extract_mode.get()
-        if mode == "llm":
+        if mode == "pptm":
+            self.mode_hint.configure(text="无需 API，10-30s，自适应模板设计 (PPT Master)")
+        elif mode == "llm":
             self.mode_hint.configure(text="需 API 连接，约 10-30s，自适应不同模板")
         else:
             self.mode_hint.configure(text="无需 API，瞬间完成，适合标准模板")
@@ -137,6 +166,8 @@ class ConfigPage(ctk.CTkFrame):
 
         if self.extract_mode.get() == "llm":
             self._detect_template_llm(path)
+        elif self.extract_mode.get() == "pptm":
+            self._detect_template_pptm(path)
         else:
             self._detect_template_rule(path)
 
@@ -177,7 +208,8 @@ class ConfigPage(ctk.CTkFrame):
             # 检查是否需要显示预览按钮（模板路径是否在 process/ 下）
             self._maybe_show_preview()
         else:
-            mode_label = "LLM 自适应" if self.extract_mode.get() == "llm" else "规则"
+            mode = self.extract_mode.get()
+            mode_label = {"pptm": "PPT Master", "llm": "LLM 自适应"}.get(mode, "规则")
             self.tmpl_status.configure(
                 text=f"⚠ 检测到完整PPTX (内容页{ratio:.0%})，请点击「提取模板骨架」",
                 text_color="orange")
@@ -286,6 +318,41 @@ class ConfigPage(ctk.CTkFrame):
         current = self.tmpl_status.cget("text")
         self.tmpl_status.configure(text=f"{current}  [{detail}]")
 
+    # ── PPT Master 检测 ──
+    def _detect_template_pptm(self, path):
+        """PPT Master 模式：用 ppt-master 分析模板，判断是否已是骨架。"""
+        try:
+            from scripts.ppt_master_adapter import is_available, detect_is_template, _LAST_ERROR
+            if not is_available():
+                err = _LAST_ERROR or "ppt-master 目录未找到"
+                self.tmpl_status.configure(
+                    text=f"PPT Master 不可用: {err}",
+                    text_color="orange")
+                return
+
+            self.tmpl_status.configure(text="PPT Master 分析中...", text_color="gray")
+            is_tpl = detect_is_template(path)
+            self.shared['is_template'] = is_tpl
+            if is_tpl:
+                self._update_extract_ui(True, 0.0)
+                self.tmpl_status.configure(
+                    text="✓ PPT Master: 已是模板骨架，可直接下一步",
+                    text_color="green")
+            else:
+                from pptx import Presentation
+                prs = Presentation(path)
+                total = len(prs.slides)
+                from scripts.make_template import classify
+                c_count = sum(1 for s in prs.slides if classify(s) in ('CONTENT', 'CONTENT_FRAME', 'DATA', 'DISCUSSION'))
+                ratio = c_count / max(total, 1)
+                self._update_extract_ui(False, ratio)
+                self.tmpl_status.configure(
+                    text=f"PPT Master: 完整PPTX ({total}页, 内容{c_count}页)，请点击「提取模板骨架」",
+                    text_color="orange")
+        except Exception as e:
+            self.tmpl_status.configure(text=f"PPT Master 检测失败: {e}", text_color="red")
+            self.extract_frame.pack_forget()
+
     # ── 预览生成模板 ──
     def _preview_template(self):
         """用系统默认程序打开生成的模板 PPTX。"""
@@ -311,7 +378,208 @@ class ConfigPage(ctk.CTkFrame):
             self._on_mode_change()
         self._validate_files()
 
-    # ── 下一步 ──
+    # ── 精细控制 ──
+    def _toggle_expert(self):
+        """切换专家模式：显示/隐藏大纲页和构建页。"""
+        show = self.expert_cb.get()
+        self.app.toggle_expert_mode(show)
+        if show:
+            self.next_btn.pack(pady=5)
+            self.tmpl_status.configure(text="分步模式：可逐页调整模板、大纲和构建细节", text_color="gray")
+        else:
+            self.next_btn.pack_forget()
+            self.tmpl_status.configure(text="", text_color="gray")
+
+    # ── 一键生成 ──
+    def _one_click_generate(self):
+        """一键生成：第一击生成大纲，第二击保存 PPT。"""
+        # 如果大纲已准备好，直接保存
+        if self.shared.get('_one_click_ready'):
+            self._save_after_generate()
+            return
+
+        self._validate_files()
+
+        # 校验文件
+        pdf_path = self.pdf_picker.get_path()
+        tmpl_path = self.tmpl_picker.get_path()
+        if not pdf_path or not os.path.exists(pdf_path):
+            self.one_click_status.configure(text="请先选择论文 PDF", text_color="red")
+            return
+        if not tmpl_path or not os.path.exists(tmpl_path):
+            self.one_click_status.configure(text="请先选择模板 PPTX", text_color="red")
+            return
+
+        # 检查 API
+        key = self.shared.get('api_key', '').strip()
+        if not key:
+            self.one_click_status.configure(text="请先配置 AI API（右下角 AI配置）", text_color="red")
+            return
+
+        # 锁定 UI
+        self._stop_requested = False
+        self.one_click_btn.configure(state="disabled", text="生成中...")
+        self.one_click_stop_btn.pack(side="left", padx=5, after=self.one_click_btn)
+        self.expert_cb.configure(state="disabled")
+        self.detect_btn.configure(state="disabled")
+        self.next_btn.configure(state="disabled")
+        self.one_click_status.configure(text="开始一键生成...", text_color="gray")
+        self.shared['pdf_path'] = pdf_path
+        self.shared['template_path'] = tmpl_path
+        self.shared['figs_dir'] = self.figs_picker.get_path() or ''
+
+        threading.Thread(target=self._do_one_click, args=(pdf_path, tmpl_path), daemon=True).start()
+
+    def _stop_one_click(self):
+        """停止一键生成。"""
+        self._stop_requested = True
+        # 重置 outline_page 状态，中断流水线
+        ol = self.app.outline_page
+        if ol._state != ol.STATE_READY:
+            ol._state = ol.STATE_IDLE
+        self.one_click_status.configure(text="正在停止...", text_color="orange")
+
+    def _do_one_click(self, pdf_path, tmpl_path):
+        """一键生成后台线程：复用 OutlinePage 的任务流水线。"""
+        def progress(msg):
+            self.one_click_status.configure(text=msg)
+
+        def stopped():
+            return getattr(self, '_stop_requested', False)
+
+        try:
+            ol = self.app.outline_page
+
+            # ── Step 1: 读取论文 + 提取元数据（等同于自动点"读取论文"按钮）──
+            if stopped(): return self._finish_one_click("已停止")
+            progress("Step 1/2: 读取论文并提取信息...")
+            try:
+                # 重置章节配置为默认值
+                ol._reset_sections()
+                # 直接调用读取论文的实际逻辑（不走 UI 线程）
+                ol._do_read_paper(pdf_path)
+                # 等待元数据提取完成（_extract_metadata 启动独立线程，需等待它结束）
+                progress("Step 1/2: 等待元数据...")
+                waited = 0
+                while ol._state != ol.STATE_READY and waited < 30:
+                    if stopped(): return self._finish_one_click("已停止")
+                    time.sleep(0.3)
+                    waited += 0.3
+                # 从 shared dict 读标题（元数据线程已写入，比读 tk widget 更可靠）
+                paper_meta = self.shared.get('paper_meta', {})
+                title = paper_meta.get('title_en', '') if paper_meta else ''
+                if title:
+                    self.shared['paper_title'] = title
+                    progress(f"Step 1/2: {title[:30]}...")
+                else:
+                    progress(f"Step 1/2: 读取完成（标题待定）")
+            except Exception as e:
+                progress(f"Step 1/2: 读取失败 ({e})")
+
+            # ── Step 2: 生成大纲（等同于自动点"生成大纲"按钮）──
+            if stopped(): return self._finish_one_click("已停止")
+            progress("Step 2/2: 生成 PPT 大纲（调用 LLM，约需30-90秒）...")
+            try:
+                self._run_outline_pipeline()
+                progress("完成！点击「一键生成 PPT」保存文件")
+            except Exception as e:
+                progress(f"大纲生成失败: {e}")
+                import traceback; traceback.print_exc()
+                return self._finish_one_click("大纲生成失败")
+
+            # 大纲生成成功后，按钮文字变更提示用户下一步操作
+            self.one_click_btn.configure(text="点击保存 PPT", fg_color="#1565C0")
+            self.shared['_one_click_ready'] = True
+
+        except Exception as e:
+            progress(f"失败: {str(e)[:80]}")
+            import traceback; traceback.print_exc()
+        finally:
+            self._finish_one_click(None)
+
+    def _run_outline_pipeline(self):
+        """调用 OutlinePage 的任务流水线生成 slide-content.json。"""
+        ol = self.app.outline_page
+
+        if not ol._check_api():
+            raise RuntimeError("API 未配置")
+
+        # 调用现有的任务流水线（和用户手动点"生成大纲"完全一样）
+        import time
+        ol._generate_outline()
+
+        # 等待流水线完成（最多 5 分钟）
+        waited = 0
+        while ol._state != ol.STATE_READY and waited < 300:
+            if getattr(self, '_stop_requested', False):
+                ol._state = ol.STATE_IDLE  # 重置状态
+                raise InterruptedError("用户停止")
+            time.sleep(0.5)
+            waited += 0.5
+
+        if ol._state != ol.STATE_READY:
+            raise RuntimeError("大纲生成超时或失败")
+
+    def _finish_one_click(self, msg):
+        """清理一键生成状态。"""
+        if msg:
+            self.one_click_status.configure(text=msg, text_color="orange" if "败" in msg or "止" in msg else "gray")
+        # 如果生成成功则保持蓝色按钮让用户点击保存
+        if not self.shared.get('_one_click_ready'):
+            self.one_click_btn.configure(state="normal", text="一键生成 PPT", fg_color="#2E7D32")
+        else:
+            self.one_click_btn.configure(state="normal")
+        self.one_click_stop_btn.pack_forget()
+        self.expert_cb.configure(state="normal")
+        self.detect_btn.configure(state="normal")
+        self.next_btn.configure(state="normal")
+
+    def _save_after_generate(self):
+        """大纲生成完成后，用户点按钮保存 PPT。"""
+        from tkinter import filedialog
+        pdf_path = self.shared.get('pdf_path', '')
+
+        output_path = filedialog.asksaveasfilename(
+            title="保存 PPT",
+            defaultextension=".pptx",
+            filetypes=[("PowerPoint", "*.pptx")],
+            initialfile=os.path.splitext(os.path.basename(pdf_path))[0] + "_汇报.pptx",
+        )
+        if not output_path:
+            return
+
+        # 构建 PPT
+        json_str = self.shared.get('slide_content_json', '')
+        config = json.loads(json_str)
+        config.setdefault('meta', {})
+        config['meta']['template_path'] = self.shared.get('template_path', '')
+        config['meta']['figs_dir'] = self.shared.get('figs_dir', '')
+        config['meta']['output_path'] = output_path
+        config['meta']['paper_meta'] = self.shared.get('paper_meta', {})
+
+        import tempfile
+        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8')
+        json.dump(config, tmp, ensure_ascii=False, indent=2)
+        tmp_path = tmp.name
+        tmp.close()
+
+        from scripts.ppt_builder import build
+        try:
+            build(config, tmp_path)
+            os.unlink(tmp_path)
+            self.one_click_status.configure(text=f"完成！→ {os.path.basename(output_path)}", text_color="green")
+            try:
+                os.startfile(output_path)
+            except Exception:
+                pass
+        except Exception as e:
+            self.one_click_status.configure(text=f"构建失败: {e}", text_color="red")
+
+        # 恢复按钮
+        self.shared['_one_click_ready'] = False
+        self.one_click_btn.configure(text="一键生成 PPT", fg_color="#2E7D32", command=self._one_click_generate)
+
+    # ── 下一步（专家模式）──
     def _go_next(self):
         # 先校验文件（刷新状态标签）
         self._validate_files()
@@ -366,6 +634,8 @@ class ConfigPage(ctk.CTkFrame):
         mode = self.extract_mode.get()
         if mode == "llm":
             threading.Thread(target=self._do_extract_llm, daemon=True).start()
+        elif mode == "pptm":
+            threading.Thread(target=self._do_extract_pptm, daemon=True).start()
         else:
             threading.Thread(target=self._do_extract_rule, daemon=True).start()
 
@@ -446,3 +716,60 @@ class ConfigPage(ctk.CTkFrame):
             self.extract_progress.configure(text=f"失败: {str(e)[:80]}", text_color="red")
             self.extract_btn.configure(state="normal")
             self.next_btn.configure(state="normal")
+
+    def _do_extract_pptm(self):
+        """PPT Master 模式：分析原始模板，提取增强设计 token。"""
+        try:
+            import os as _os
+            src = self.shared['template_path']
+            proc_dir = _os.path.join(_os.path.dirname(_os.path.abspath(src)), 'process')
+            _os.makedirs(proc_dir, exist_ok=True)
+
+            # Step 1: 分析原始模板
+            self.extract_progress.configure(text="PPT Master 分析中...")
+            from scripts.ppt_master_adapter import analyze_template, extract_design_tokens, save_analysis_cache
+            analysis = analyze_template(src)
+
+            # Step 2: 提取增强设计 token
+            self.extract_progress.configure(text="提取设计 token...")
+            design = extract_design_tokens(src, analysis)
+
+            # Step 3: 保存到 process/
+            import json as _json
+            design_path = _os.path.join(proc_dir, 'template_design.json')
+            with open(design_path, 'w', encoding='utf-8') as f:
+                _json.dump(design, f, indent=2, ensure_ascii=False)
+            cache_path = _os.path.join(proc_dir, 'analysis_pptm.json')
+            save_analysis_cache(analysis, cache_path)
+
+            # Step 4: 更新状态
+            self.shared['template_path'] = src
+            self.shared['is_template'] = True
+            self.shared['pptmaster_analysis'] = analysis
+
+            page_info = f"({analysis['slide_count']}页)"
+            short_map = {'cover_candidate': '封面', 'toc_candidate': '目录',
+                         'chapter_candidate': '章节', 'content_candidate': '内容',
+                         'ending_candidate': '致谢'}
+            for idx in sorted(analysis.get('page_types', {}).keys()):
+                pt = analysis['page_types'][idx]
+                short = short_map.get(pt, pt)
+                page_info += f" p{idx}={short}"
+
+            self.tmpl_status.configure(
+                text=f"PPT Master 分析完成 {page_info}", text_color="green")
+            self.extract_progress.configure(text="完成", text_color="green")
+            self._on_extract_done(src)
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.extract_progress.configure(
+                text=f"PPT Master 失败，回退到规则模式...", text_color="orange")
+            try:
+                self._do_extract_rule()
+            except Exception:
+                self.extract_progress.configure(
+                    text=f"失败: {str(e)[:80]}", text_color="red")
+                self.extract_btn.configure(state="normal")
+                self.next_btn.configure(state="normal")

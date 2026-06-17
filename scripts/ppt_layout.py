@@ -223,6 +223,22 @@ def init_design(json_path):
         if TITLE_COLOR == WHITE or TITLE_COLOR == _hex_to_rgb('FFFFFF'):
             TITLE_COLOR = primary
 
+    # ── 如果存在 ppt-master 提取的 theme 数据，优先使用 ──
+    theme = d.get('theme', {})
+    if theme:
+        # 使用 theme 中的权威 primary/dark 色覆盖启发式推导
+        theme_primary = theme.get('palette_primary', '')
+        theme_dark = theme.get('palette_dark', '')
+        if theme_primary:
+            primary_rgb = _hex_to_rgb(theme_primary)
+            dark_rgb = _hex_to_rgb(theme_dark) if theme_dark else None
+            derive_palette(primary_rgb, dark_rgb)
+            ACCENT_COLOR = primary_rgb
+
+        # 补充空白的封面报告人字体
+        if 'cover_presenter' in d and not d['cover_presenter']:
+            d['cover_presenter'] = {'font_name': FONT_EN, 'font_size_pt': 20, 'bold': False, 'color': BODY_COLOR}
+
 
 def parse_color(val):
     """解析颜色值：RGBColor / 命名键 / '#RRGGBB'。失败返回 DARK。"""
@@ -235,18 +251,49 @@ def parse_color(val):
     return DARK
 
 
+def _est_wrapped_lines(text_lines, font_sz, box_w_in):
+    """估算多段文本在指定宽度内的实际折行总数。
+
+    text_lines: 已按 \\n 分割的文本行列表
+    font_sz:    EMU 字体大小 (如 Pt(14))
+    box_w_in:   文本框宽度 (英寸)
+
+    CJK 等宽 ~1 em，ASCII ~0.55 em。
+    """
+    font_in = font_sz / 12700 / 72  # pt → 英寸
+    # PPT 文本框有内边距，有效宽度约为标称宽度的 92%
+    chars_per_line = max(1, int(box_w_in / font_in * 0.92))
+    total = 0
+    for line in text_lines:
+        if not line.strip():
+            total += 1
+            continue
+        eff_len = 0
+        for ch in line:
+            if '一' <= ch <= '鿿' or '　' <= ch <= '〿' or '＀' <= ch <= '￯':
+                eff_len += 1.0
+            elif ord(ch) < 128:
+                eff_len += 0.55
+            else:
+                eff_len += 1.0
+        total += max(1, -(-int(eff_len) // chars_per_line))  # ceil division
+    return max(1, total)
+
+
+def _line_h(font_sz):
+    """单行行高 (英寸)，含默认 120% 行距。"""
+    return font_sz / 12700 / 72 * 1.25
+
+
 def T(slide, l, t, w, h, text, sz=None, bold=False, color=None, align=PP_ALIGN.LEFT):
     """文本框，高度随文字自适应（不低于参数 h）。"""
     if sz is None:
         sz = BODY_SIZE
     if color is None:
         color = BODY_COLOR
-    # 估算行数：中文在 Arial 下较宽，每字符≈sz_pt*0.020in, 行高≈sz_pt*0.025in
-    font_in = sz / 12700
-    char_w_est = font_in * 0.020
-    line_h_est = font_in * 0.025
-    est_lines = max(1, int(len(text) * char_w_est / max(w, 0.5)) + 1)
-    actual_h = max(h, est_lines * line_h_est)
+    # 用 _est_wrapped_lines 估算折行（CJK≈1em, ASCII≈0.55em），比固定系数更准
+    est_lines = _est_wrapped_lines([text], sz, w)
+    actual_h = max(h, est_lines * _line_h(sz))
     tb = slide.shapes.add_textbox(Inches(l), Inches(t), Inches(w), Inches(actual_h))
     tf = tb.text_frame; tf.word_wrap = True
     p = tf.paragraphs[0]; r = p.add_run()
@@ -258,12 +305,18 @@ def T(slide, l, t, w, h, text, sz=None, bold=False, color=None, align=PP_ALIGN.L
 
 
 def M(slide, l, t, w, h, lines, sz=None, color=None):
-    """多行文本框，高度随文字行数自适应（不低于参数 h）。"""
+    """多行文本框，高度按实际折行估算（不低于参数 h）。
+
+    逐字符加权计算折行数（CJK≈1em, ASCII≈0.55em），不再简单按段落数计算。
+    """
     if sz is None: sz = BODY_SIZE
     if color is None: color = BODY_COLOR
-    n = max(1, len(lines))
-    line_h = sz / 12700 * 0.025 * 1.3  # 行高含间距，中文在Arial下偏宽
-    actual_h = max(h, n * line_h)
+    text_lines = [ln for ln in lines if ln.strip()] if lines else ['']
+    if not text_lines:
+        text_lines = ['']
+    est_lines = _est_wrapped_lines(text_lines, sz, w)
+    line_h_val = _line_h(sz)
+    actual_h = max(h, est_lines * line_h_val + (len(text_lines) - 1) * 0.04)
     tb = slide.shapes.add_textbox(Inches(l), Inches(t), Inches(w), Inches(actual_h))
     tf = tb.text_frame; tf.word_wrap = True
     for i, line in enumerate(lines):
@@ -273,6 +326,35 @@ def M(slide, l, t, w, h, lines, sz=None, color=None):
         r.font.color.rgb = parse_color(color) if isinstance(color, str) else color
         p.space_after = Pt(2)
     return tb
+
+
+def _max_chars_fit(lines, font_sz, box_w, box_h):
+    """估算在给定文本框内能容纳的最大字符数。返回可容纳的每条文本最大长度列表。"""
+    font_in = font_sz / 12700 / 72
+    chars_per_line = max(1, int(box_w / font_in))
+    line_h_val = _line_h(font_sz)
+    max_lines_total = max(1, int(box_h / line_h_val))
+    # 为每个段落分配行数（平均分配，至少1行）
+    n_paras = max(1, len(lines))
+    lines_per_para = max(1, max_lines_total // n_paras)
+    return [lines_per_para * chars_per_line] * n_paras
+
+
+def truncate_lines(lines, font_sz, box_w, box_h, suffix='...'):
+    """截断文本列表使其适配给定文本框。返回截断后的列表。"""
+    if not lines:
+        return lines
+    limits = _max_chars_fit(lines, font_sz, box_w, box_h)
+    result = []
+    for i, text in enumerate(lines):
+        limit = limits[min(i, len(limits) - 1)]
+        if len(text) <= limit:
+            result.append(text)
+        else:
+            # 截断，保留后缀空间
+            cut = max(0, limit - len(suffix))
+            result.append(text[:cut] + suffix)
+    return result
 
 
 def R(slide, l, t, w, h, fill_color, rounded=False, line_color=None):

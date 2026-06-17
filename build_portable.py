@@ -23,10 +23,10 @@ def download_python():
     zip_path = os.path.join(PORTABLE_DIR, "python_embed.zip")
 
     if os.path.exists(python_dir) and os.path.exists(os.path.join(python_dir, "python.exe")):
-        print("[1/6] Python embeddable 已存在，跳过下载")
+        print("[1/7] Python embeddable 已存在，跳过下载")
         return python_dir
 
-    print(f"[1/6] 下载 Python {PYTHON_VERSION} embeddable (~12MB)...")
+    print(f"[1/7] 下载 Python {PYTHON_VERSION} embeddable (~12MB)...")
     os.makedirs(PORTABLE_DIR, exist_ok=True)
 
     def _report(count, block, total):
@@ -71,10 +71,10 @@ def install_pip(python_dir):
     python_dir = os.path.abspath(python_dir)
     pip_exe = os.path.join(python_dir, "Scripts", "pip.exe")
     if os.path.exists(pip_exe):
-        print("[2/6] pip 已安装，跳过")
+        print("[2/7] pip 已安装，跳过")
         return pip_exe
 
-    print("[2/6] 安装 pip...")
+    print("[2/7] 安装 pip...")
     get_pip_url = "https://bootstrap.pypa.io/get-pip.py"
     get_pip_path = os.path.abspath(os.path.join(PORTABLE_DIR, "get-pip.py"))
     urllib.request.urlretrieve(get_pip_url, get_pip_path)
@@ -121,10 +121,10 @@ def install_deps(pip_exe):
             missing.append(dep)
 
     if not missing:
-        print("[3/6] 依赖已完整，跳过")
+        print("[3/7] 依赖已完整，跳过")
         return
 
-    print(f"[3/6] 安装依赖 ({len(missing)} 个缺失)...")
+    print(f"[3/7] 安装依赖 ({len(missing)} 个缺失)...")
     for dep in missing:
         print(f"  pip install {dep}...")
         subprocess.run([
@@ -185,7 +185,7 @@ def copy_tkinter(python_dir):
 def copy_project():
     """复制 paper2ppt 项目文件到便携包。"""
     base = os.path.abspath(os.path.dirname(__file__))
-    print("[4/6] 复制项目文件...")
+    print("[4/7] 复制项目文件...")
     items = [
         "gui_app.py", "gui", "scripts", "templates",
         "prompt-base.txt", "agent-prompt.txt",
@@ -217,7 +217,7 @@ def copy_project():
 
 def create_launcher():
     """创建 启动.bat 启动脚本（._pth 处理 Python 模块路径，PATH 处理 Windows DLL 搜索）。"""
-    print("[5/6] 创建启动脚本...")
+    print("[5/7] 创建启动脚本...")
     bat_content = r"""@echo off
 set PYTHONIOENCODING=utf-8
 cd /d "%~dp0"
@@ -237,7 +237,7 @@ if errorlevel 1 pause
 
 def package_zip():
     """将便携包压缩为单个 zip 文件。"""
-    print("[6/6] 打包为 ZIP...")
+    print("[6/7] 打包为 ZIP...")
     os.makedirs(DIST_DIR, exist_ok=True)
     zip_name = f"PaperDeck_v{VERSION}_portable.zip"
     zip_path = os.path.join(DIST_DIR, zip_name)
@@ -265,12 +265,12 @@ def package_zip():
     try:
         if os.path.exists(extract_dir):
             shutil.rmtree(extract_dir)
-        print(f"\n[7/6] 自动解压 → {extract_dir}")
+        print(f"\n[7/7] 自动解压 → {extract_dir}")
         with zipfile.ZipFile(zip_path, 'r') as zf:
             zf.extractall(extract_dir)
         print(f"  解压完成，双击 {extract_dir}\\启动.bat 即可测试")
     except PermissionError:
-        print(f"\n[7/6] 自动解压跳过（目录被占用，ZIP 已生成）")
+        print(f"\n[7/7] 自动解压跳过（目录被占用，ZIP 已生成）")
         print(f"  手动解压 {zip_path} 即可")
 
 
@@ -287,15 +287,15 @@ def main():
     # ── 增量构建：已有 portable/python/ 则不清理，仅更新项目文件 ──
     force_clean = '--clean' in sys.argv or '--force' in sys.argv
     if force_clean and os.path.exists(PORTABLE_DIR):
-        print(f"\n[0/6] 强制清理旧构建...")
+        print(f"\n[0/7] 强制清理旧构建...")
         shutil.rmtree(PORTABLE_DIR)
     elif not os.path.exists(os.path.join(PORTABLE_DIR, 'python', 'python.exe')):
         # 首次构建，或 python embeddable 缺失时才清理
         if os.path.exists(PORTABLE_DIR):
-            print(f"\n[0/6] Python 环境缺失，清理重建...")
+            print(f"\n[0/7] Python 环境缺失，清理重建...")
             shutil.rmtree(PORTABLE_DIR)
     else:
-        print(f"\n[0/6] 检测到已有 Python 环境，增量构建 (仅更新项目文件)")
+        print(f"\n[0/7] 检测到已有 Python 环境，增量构建 (仅更新项目文件)")
         # 清理上次的项目文件，保留 python/ 和 Lib/ 依赖
         for item in os.listdir(PORTABLE_DIR):
             p = os.path.join(PORTABLE_DIR, item)

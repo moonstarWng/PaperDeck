@@ -493,9 +493,14 @@ def build(config, json_path='.'):
             print(f"  Result: {title[:60]}")
 
         elif stype in slide_builders:
-            # 解析 paper_info 的相对路径
-            if stype == 'paper_info' and item.get('pdf_path'):
-                item['pdf_path'] = resolve_path(json_path, item['pdf_path'])
+            # 解析 paper_info 的相对路径，注入元数据
+            if stype == 'paper_info':
+                if item.get('pdf_path'):
+                    item['pdf_path'] = resolve_path(json_path, item['pdf_path'])
+                # 注入 CrossRef 元数据（如果存在）
+                pm = config.get('meta', {}).get('paper_meta', {})
+                if pm:
+                    item.setdefault('paper_meta', pm)
             slide_builders[stype](prs, item)
             new_order.append(len(prs.slides) - 1)
             print(f"  {stype}: {item.get('title', '')[:60]}")

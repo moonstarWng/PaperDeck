@@ -95,7 +95,7 @@ class OutlinePage(ctk.CTkFrame):
                        command=self._reset_sections).pack(side="left", padx=5)
 
         # 论文信息页（独立开关）
-        self.paper_info_var = ctk.BooleanVar(value=False)
+        self.paper_info_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(self.sections_frame, text="附加论文信息页（PDF首页 + 原文链接）",
                          variable=self.paper_info_var).pack(anchor="w", padx=5, pady=(5, 0))
 
@@ -274,10 +274,32 @@ class OutlinePage(ctk.CTkFrame):
                 text=f"读取失败: {e}", text_color="red"))
 
     def _extract_metadata(self, paper_text):
-        """元数据提取: Semantic Scholar → LLM 回退。"""
+        """元数据提取: PDF DOI → CrossRef → Scholar 兜底 → LLM 最后兜底。"""
         if not self._check_api():
             return
-        self._safe_ui(lambda: self.status.configure(text="正在查询 Semantic Scholar...", text_color="gray"))
+        self._safe_ui(lambda: self.status.configure(text="正在提取 DOI ...", text_color="gray"))
+        threading.Thread(target=self._do_extract_metadata, args=(paper_text,), daemon=True).start()
+
+    def _do_extract_metadata(self, paper_text):
+        """三步元数据提取。"""
+        pdf_path = self.shared.get('pdf_path', '')
+
+        # Step 1: DOI → CrossRef（不读原文，只需 PDF 路径）
+        if pdf_path:
+            try:
+                from scripts.paper_metadata import extract_metadata
+                meta = extract_metadata(pdf_path)
+                if meta:
+                    self._apply_crossref_metadata(meta)
+                    self._set_state(self.STATE_READY)
+                    self._safe_ui(lambda: self.status.configure(
+                        text="✓ 元数据已获取 (CrossRef)", text_color="green"))
+                    return
+            except Exception:
+                pass
+
+        # Step 2: Semantic Scholar（原兜底）
+        self._safe_ui(lambda: self.status.configure(text="CrossRef 未命中，尝试 Semantic Scholar...", text_color="gray"))
         threading.Thread(target=self._do_scholar_lookup, args=(paper_text,), daemon=True).start()
 
     def _do_scholar_lookup(self, paper_text):
@@ -320,6 +342,25 @@ class OutlinePage(ctk.CTkFrame):
         self.journal_entry.delete(0, 'end'); self.journal_entry.insert(0, meta.get('journal', ''))
         self.author_entry.delete(0, 'end'); self.author_entry.insert(0, meta.get('authors', ''))
         self.shared['paper_meta'] = meta
+
+    def _apply_crossref_metadata(self, meta):
+        """应用 CrossRef 完整元数据。"""
+        self.title_entry.delete(0, 'end'); self.title_entry.insert(0, meta.get('title', ''))
+        journal_str = meta.get('citation', meta.get('journal', ''))
+        self.journal_entry.delete(0, 'end'); self.journal_entry.insert(0, journal_str)
+        self.author_entry.delete(0, 'end'); self.author_entry.insert(0, meta.get('authors', ''))
+        # 保存完整元数据到 shared
+        self.shared['paper_meta'] = {
+            'title_en': meta.get('title', ''),
+            'journal': journal_str,
+            'authors': meta.get('authors', ''),
+            'year': meta.get('year'),
+            'abstract': meta.get('abstract', ''),
+            'doi': meta.get('doi', ''),
+            'url': meta.get('url', ''),
+            'keywords': meta.get('keywords', ''),
+            'citation': meta.get('citation', ''),
+        }
 
     def _do_metadata_call(self, prompt):
         try:
@@ -1046,26 +1087,47 @@ class OutlinePage(ctk.CTkFrame):
     def _bind_tooltip(self, widget, text):
         """给 widget 绑定 hover 提示：鼠标悬浮显示 tooltip，移开消失。"""
         tooltip = None
-        def _enter(event):
-            nonlocal tooltip
-            if tooltip is None:
-                tooltip = ctk.CTkToplevel(widget)
-                tooltip.overrideredirect(True)
-                tooltip.configure(fg_color="#2b2b2b")
-                lbl = ctk.CTkLabel(tooltip, text=text, justify="left",
-                                    font=ctk.CTkFont(size=12))
-                lbl.pack(padx=8, pady=6)
-                # 定位在 widget 右侧
-                x = widget.winfo_rootx() + widget.winfo_width() + 6
-                y = widget.winfo_rooty()
-                tooltip.geometry(f"+{x}+{y}")
-        def _leave(event):
-            nonlocal tooltip
-            if tooltip:
-                tooltip.destroy()
+        _hide_id = None
+
+        def _destroy():
+            nonlocal tooltip, _hide_id
+            if tooltip is not None:
+                try:
+                    tooltip.destroy()
+                except Exception:
+                    pass
                 tooltip = None
+            _hide_id = None
+
+        def _enter(event):
+            nonlocal tooltip, _hide_id
+            # 取消待执行的隐藏
+            if _hide_id is not None:
+                widget.after_cancel(_hide_id)
+                _hide_id = None
+            if tooltip is not None:
+                return
+            tooltip = ctk.CTkToplevel(widget)
+            tooltip.overrideredirect(True)
+            tooltip.configure(fg_color="#2b2b2b")
+            lbl = ctk.CTkLabel(tooltip, text=text, justify="left",
+                                font=ctk.CTkFont(size=12))
+            lbl.pack(padx=8, pady=6)
+            x = widget.winfo_rootx() + widget.winfo_width() + 6
+            y = widget.winfo_rooty()
+            tooltip.geometry(f"+{x}+{y}")
+            # tooltip 自身也响应离开事件
+            tooltip.bind("<Leave>", _schedule_hide)
+            lbl.bind("<Leave>", _schedule_hide)
+
+        def _schedule_hide(event=None):
+            nonlocal _hide_id
+            if _hide_id is not None:
+                widget.after_cancel(_hide_id)
+            _hide_id = widget.after(150, _destroy)
+
         widget.bind("<Enter>", _enter)
-        widget.bind("<Leave>", _leave)
+        widget.bind("<Leave>", _schedule_hide)
 
     def _check_api(self):
         if not self.shared.get('api_key'):

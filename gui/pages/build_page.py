@@ -127,6 +127,7 @@ class BuildPage(ctk.CTkFrame):
         config['meta']['template_path'] = self.shared.get('template_path', '')
         config['meta']['figs_dir'] = self.shared.get('figs_dir', '')
         config['meta']['output_path'] = output_path
+        config['meta']['paper_meta'] = self.shared.get('paper_meta', {})
 
         # 写入临时 JSON 文件
         tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8')
